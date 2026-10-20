@@ -11,7 +11,7 @@
     "queue"
   ],
   "type": "flarum-extension",
-  "license": "proprietary",
+  "license": "MIT",
   "authors": [
     {
       "name": "ernestdefoe",
