@@ -11,6 +11,7 @@ use Flarum\Flags\Flag;
 use Flarum\Notification\Blueprint\BlueprintInterface;
 use Flarum\Notification\NotificationSyncer;
 use Flarum\Post\Post;
+use Flarum\User\Exception\PermissionDeniedException;
 use Flarum\User\User;
 use Illuminate\Contracts\Bus\Dispatcher as Bus;
 use Illuminate\Contracts\Cache\LockProvider;
@@ -231,6 +232,44 @@ class Docket
 
             return;
         }
+    }
+
+    /**
+     * @var array<int, true> posts already checked in this request
+     */
+    protected array $mayDismiss = [];
+
+    public function assertMayDismiss(int $postId, User $actor): void
+    {
+        if (isset($this->closing[$postId]) || isset($this->mayDismiss[$postId]) || ! $closed = Queue::closedTo($actor)) {
+            return;
+        }
+
+        $kept = Report::query()
+            ->where('post_id', $postId)
+            ->whereIn('status', Report::ACTIVE)
+            ->whereIn('queue_id', $closed)
+            ->exists();
+
+        if ($kept) {
+            throw new PermissionDeniedException();
+        }
+
+        $this->mayDismiss[$postId] = true;
+    }
+
+    /**
+     * A deleted user's reports go back to open; rules that assigned to them
+     * stop assigning. The foreign keys do the latter on most databases.
+     */
+    public function userDeleted(int $userId): void
+    {
+        Report::query()
+            ->where('assignee_id', $userId)
+            ->whereIn('status', Report::ACTIVE)
+            ->update(['assignee_id' => null, 'status' => Report::OPEN]);
+
+        Rule::query()->where('assignee_id', $userId)->update(['assignee_id' => null]);
     }
 
     public function canSee(User $user, Report $report): bool

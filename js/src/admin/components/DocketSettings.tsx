@@ -107,7 +107,9 @@ export default class DocketSettings extends Component {
         <div className="DocketSettings-text">
           <strong>{queue.name()}</strong>
           <div className="helpText">
-            {groups.length ? t('queues.kept_to', { groups: groups.map((g) => g.namePlural()).join(', ') }) : t('queues.open_to_all')}
+            {groups.length
+              ? t('queues.kept_to', { groups: groups.map((g) => g.namePlural()).join(', ') })
+              : t(queue.isRestricted() ? 'queues.admins_only' : 'queues.open_to_all')}
           </div>
         </div>
         <div className="DocketSettings-actions">

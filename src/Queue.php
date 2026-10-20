@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  * @property string|null $description
  * @property string|null $color
  * @property int $position
+ * @property bool $is_restricted
  * @property Carbon|null $created_at
  * @property-read \Illuminate\Database\Eloquent\Collection<int, Group> $groups
  */
@@ -23,7 +24,7 @@ class Queue extends AbstractModel
 
     protected $table = 'docket_queues';
 
-    protected $casts = ['position' => 'integer', 'created_at' => 'datetime'];
+    protected $casts = ['position' => 'integer', 'is_restricted' => 'boolean', 'created_at' => 'datetime'];
 
     public function groups(): BelongsToMany
     {
@@ -32,7 +33,8 @@ class Queue extends AbstractModel
 
     /**
      * The ids of the queues kept from this user: kept to groups, none of
-     * which the user is in. Empty for admins.
+     * which the user is in (a queue whose groups were all deleted is kept
+     * from everyone). Empty for admins.
      *
      * Reads the queue map from the cache, so it costs no query.
      *
@@ -48,7 +50,7 @@ class Queue extends AbstractModel
         $closed = [];
 
         foreach (static::accessMap() as $queueId => $queueGroups) {
-            if ($queueGroups && ! array_intersect($queueGroups, $groups)) {
+            if ($queueGroups !== null && ! array_intersect($queueGroups, $groups)) {
                 $closed[] = $queueId;
             }
         }
@@ -57,9 +59,9 @@ class Queue extends AbstractModel
     }
 
     /**
-     * Every queue's groups, by queue id: [] for a queue open to all.
+     * Every queue's groups, by queue id: null for a queue open to all.
      *
-     * @return array<int, int[]>
+     * @return array<int, int[]|null>
      */
     public static function accessMap(): array
     {
@@ -67,10 +69,12 @@ class Queue extends AbstractModel
         $cache = resolve('cache.store');
 
         return $cache->rememberForever(self::CACHE_KEY, function () {
-            $map = static::query()->pluck('id')->mapWithKeys(fn ($id) => [(int) $id => []])->all();
+            $map = static::query()->pluck('is_restricted', 'id')->mapWithKeys(fn ($restricted, $id) => [(int) $id => $restricted ? [] : null])->all();
 
             foreach (static::query()->getConnection()->table('docket_queue_group')->get() as $row) {
-                $map[(int) $row->queue_id][] = (int) $row->group_id;
+                if (array_key_exists((int) $row->queue_id, $map) && $map[(int) $row->queue_id] !== null) {
+                    $map[(int) $row->queue_id][] = (int) $row->group_id;
+                }
             }
 
             return $map;

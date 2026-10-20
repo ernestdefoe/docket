@@ -123,6 +123,51 @@ class QueueTest extends DocketTestCase
     }
 
     #[Test]
+    public function a_kept_queues_flags_cannot_be_dismissed_from_outside_it(): void
+    {
+        $queue = $this->seniorQueue();
+        $this->flag(1, self::REPORTER);
+        $this->moveTo($this->reportId(1), $queue, self::MOD2);
+
+        $dismiss = fn (int $as) => $this->send($this->request('DELETE', '/api/posts/1/flags', ['authenticatedAs' => $as]))->getStatusCode();
+
+        $this->assertSame(403, $dismiss(self::MOD));
+        $this->assertSame(1, $this->database()->table('flags')->where('post_id', 1)->count());
+        $this->assertSame(204, $dismiss(self::MOD2));
+    }
+
+    #[Test]
+    public function deleting_the_only_group_a_queue_is_kept_to_keeps_it_to_admins(): void
+    {
+        $queue = $this->seniorQueue();
+        $this->flag(1, self::REPORTER);
+        $id = $this->reportId(1);
+        $this->moveTo($id, $queue, self::MOD2);
+
+        $response = $this->send($this->request('DELETE', '/api/groups/'.self::SENIOR_GROUP, ['authenticatedAs' => self::ADMIN]));
+        $this->assertSame(204, $response->getStatusCode());
+
+        // Not opened to every moderator: MOD2 lost the group, MOD never had it.
+        $this->assertSame(404, $this->get("/api/docket-reports/$id", self::MOD)->getStatusCode());
+        $this->assertSame(404, $this->get("/api/docket-reports/$id", self::MOD2)->getStatusCode());
+        $this->assertSame(200, $this->get("/api/docket-reports/$id", self::ADMIN)->getStatusCode());
+    }
+
+    #[Test]
+    public function a_deleted_holders_reports_go_back_to_open(): void
+    {
+        $this->flag(1, self::REPORTER);
+        $id = $this->reportId(1);
+        $this->updateReport($id, self::MOD2, [], ['assignee' => ['data' => ['type' => 'users', 'id' => (string) self::MOD2]]]);
+
+        $this->assertSame(204, $this->send($this->request('DELETE', '/api/users/'.self::MOD2, ['authenticatedAs' => self::ADMIN]))->getStatusCode());
+
+        $row = $this->database()->table('docket_reports')->where('id', $id)->first();
+        $this->assertSame('open', $row->status);
+        $this->assertNull($row->assignee_id);
+    }
+
+    #[Test]
     public function only_admins_reorder(): void
     {
         $a = (int) $this->json($this->createQueue(self::ADMIN, ['name' => 'A']))['data']['id'];

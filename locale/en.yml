@@ -172,6 +172,7 @@ ernestdefoe-docket:
       save: Save queue
       kept_to: "Kept to {groups}"
       open_to_all: Every moderator
+      admins_only: Admins only (the groups it was kept to were deleted)
 
     rules:
       title: Auto-assignment rules

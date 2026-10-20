@@ -10,6 +10,7 @@ export class Queue extends Model {
   description = Model.attribute<string | null>('description');
   color = Model.attribute<string | null>('color');
   position = Model.attribute<number>('position');
+  isRestricted = Model.attribute<boolean>('isRestricted');
   groups = Model.hasMany<Group>('groups');
 }
 

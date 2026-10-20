@@ -61,9 +61,11 @@ class QueueResource extends AbstractDatabaseResource
                 ->authenticated()
                 ->defaultSort('position'),
             Endpoint\Create::make()
-                ->admin(),
+                ->admin()
+                ->after($this->settle(...)),
             Endpoint\Update::make()
-                ->admin(),
+                ->admin()
+                ->after($this->settle(...)),
             Endpoint\Delete::make()
                 ->admin(),
         ];
@@ -86,6 +88,9 @@ class QueueResource extends AbstractDatabaseResource
                 ->nullable()
                 ->regex('/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/'),
             Schema\Integer::make('position'),
+            Schema\Boolean::make('isRestricted')
+                ->property('is_restricted')
+                ->visible(fn (Queue $queue, FlarumContext $context) => $context->getActor()->isAdmin()),
 
             Schema\Relationship\ToMany::make('groups')
                 ->writable(fn (Queue $queue, FlarumContext $context) => $context->getActor()->isAdmin())
@@ -101,11 +106,23 @@ class QueueResource extends AbstractDatabaseResource
         ];
     }
 
-    public function saved(object $model, Context $context): ?object
+    /**
+     * After the groups are saved, which is after the model's own save hooks:
+     * restricted is set by the groups an admin keeps the queue to, and is
+     * not cleared when those groups are later deleted.
+     */
+    protected function settle(FlarumContext $context, Queue $queue): Queue
     {
+        $restricted = $queue->groups()->exists();
+
+        if ($queue->is_restricted !== $restricted) {
+            $queue->is_restricted = $restricted;
+            $queue->save();
+        }
+
         Queue::forgetAccessMap();
 
-        return parent::saved($model, $context);
+        return $queue;
     }
 
     /**
