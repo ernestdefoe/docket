@@ -207,7 +207,7 @@ class Docket
                 $report->save();
             }
 
-            $report->log('routed', null, ['rule' => $rule->name, 'queue' => $rule->queue_id]);
+            $report->log('routed', null, ['rule' => $rule->name, 'queue' => $rule->queue?->name]);
 
             $assignee = $rule->assignee_id
                 ? $this->eligible(User::query()->find($rule->assignee_id), $report)
@@ -281,7 +281,7 @@ class Docket
         $report->setRelation('assignee', $to);
 
         if ($to) {
-            $report->log($by && $by->id === $to->id ? 'claimed' : 'assigned', $by, ['to' => $to->id]);
+            $report->log($by && $by->id === $to->id ? 'claimed' : 'assigned', $by, ['to' => $to->id, 'name' => $to->display_name]);
         } else {
             $report->log('unassigned', $by);
         }
@@ -297,13 +297,14 @@ class Docket
             return;
         }
 
-        $from = $report->queue_id;
+        $from = $report->queue;
         $report->queue_id = $queue?->id;
         $report->updated_at = Carbon::now();
         $report->save();
         $report->setRelation('queue', $queue);
 
-        $report->log('moved', $by, ['from' => $from, 'to' => $queue?->id]);
+        // Names as they were: a queue can be renamed or deleted later.
+        $report->log('moved', $by, ['from' => $from?->name, 'to' => $queue?->name]);
     }
 
     /**

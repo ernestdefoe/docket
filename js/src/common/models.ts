@@ -1,0 +1,66 @@
+import Model from 'flarum/common/Model';
+import type Post from 'flarum/common/models/Post';
+import type User from 'flarum/common/models/User';
+import type Group from 'flarum/common/models/Group';
+
+export type Status = 'open' | 'in_progress' | 'resolved' | 'rejected';
+
+export class Queue extends Model {
+  name = Model.attribute<string>('name');
+  description = Model.attribute<string | null>('description');
+  color = Model.attribute<string | null>('color');
+  position = Model.attribute<number>('position');
+  groups = Model.hasMany<Group>('groups');
+}
+
+export class Entry extends Model {
+  type = Model.attribute<string>('type');
+  reason = Model.attribute<string | null>('reason');
+  reasonDetail = Model.attribute<string | null>('reasonDetail');
+  createdAt = Model.attribute<Date | undefined, string>('createdAt', Model.transformDate);
+  reportStatus = Model.attribute<Status | 'closed'>('reportStatus');
+  outcome = Model.attribute<string | null>('outcome');
+  user = Model.hasOne<User | null>('user');
+  post = Model.hasOne<Post | null>('post');
+}
+
+export class ReportEvent extends Model {
+  type = Model.attribute<string>('type');
+  /** The `data` attribute: `data` itself is the model's resource object. */
+  details = Model.attribute<Record<string, any> | null>('data');
+  body = Model.attribute<string | null>('body');
+  createdAt = Model.attribute<Date | undefined, string>('createdAt', Model.transformDate);
+  user = Model.hasOne<User | null>('user');
+}
+
+export class Report extends Model {
+  status = Model.attribute<Status>('status');
+  outcome = Model.attribute<string | null>('outcome');
+  reportersNotified = Model.attribute<boolean>('reportersNotified');
+  entryCount = Model.attribute<number>('entryCount');
+  createdAt = Model.attribute<Date | undefined, string>('createdAt', Model.transformDate);
+  updatedAt = Model.attribute<Date | undefined, string>('updatedAt', Model.transformDate);
+  closedAt = Model.attribute<Date | null | undefined, string | null>('closedAt', Model.transformDate);
+  canAssignOthers = Model.attribute<boolean>('canAssignOthers');
+  post = Model.hasOne<Post | null>('post');
+  user = Model.hasOne<User | null>('user');
+  assignee = Model.hasOne<User | null>('assignee');
+  queue = Model.hasOne<Queue | null>('queue');
+  closedBy = Model.hasOne<User | null>('closedBy');
+  entries = Model.hasMany<Entry>('entries');
+  events = Model.hasMany<ReportEvent>('events');
+
+  isActive() {
+    return this.status() === 'open' || this.status() === 'in_progress';
+  }
+}
+
+export class Rule extends Model {
+  name = Model.attribute<string>('name');
+  position = Model.attribute<number>('position');
+  isEnabled = Model.attribute<boolean>('isEnabled');
+  conditions = Model.attribute<{ tags: number[]; reasons: string[]; types: string[]; groups: number[] } | null>('conditions');
+  queue = Model.hasOne<Queue | null>('queue');
+  assignee = Model.hasOne<User | null>('assignee');
+  assigneeGroup = Model.hasOne<Group | null>('assigneeGroup');
+}
