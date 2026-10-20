@@ -1,4 +1,4 @@
-// Report centre. Only Flarum's own variables, so every theme and dark mode
+// Report centre. Only Flarum's own colour properties, so every theme and dark mode
 // carry through.
 
 .DocketPage {
@@ -9,7 +9,7 @@
   font-size: 18px;
 }
 .DocketPage-intro {
-  color: @muted-color;
+  color: var(--muted-color);
   margin: -8px 0 15px;
 }
 .DocketPage-nav .Button-badge {
@@ -39,12 +39,12 @@
   padding: 12px;
   margin-bottom: 8px;
   border-radius: @border-radius;
-  background: @control-bg;
-  color: @text-color;
+  background: var(--control-bg);
+  color: var(--text-color);
   text-decoration: none !important;
 
   &:hover {
-    background: darken(@control-bg, 3%);
+    background: var(--control-bg-shaded);
   }
 }
 .DocketItem-avatar {
@@ -62,17 +62,17 @@
   white-space: nowrap;
 }
 .DocketItem-id {
-  color: @muted-color;
+  color: var(--muted-color);
   font-weight: normal;
 }
 .DocketItem-excerpt {
   margin: 3px 0;
-  color: @muted-color;
+  color: var(--muted-color);
   overflow-wrap: anywhere;
 }
 .DocketItem-meta {
   font-size: 12px;
-  color: @muted-color;
+  color: var(--muted-color);
 
   span + span::before {
     content: ' · ';
@@ -98,8 +98,8 @@
   font-weight: bold;
   padding: 2px 8px;
   border-radius: 12px;
-  background: fade(@muted-color, 15%);
-  color: @text-color;
+  background: color-mix(in srgb, var(--muted-color) 15%, transparent);
+  color: var(--text-color);
   white-space: nowrap;
   vertical-align: middle;
 }
@@ -117,12 +117,12 @@
 }
 
 .DocketQueueChip {
-  --docket-queue: @muted-color;
+  --docket-queue: var(--muted-color);
   font-size: 12px;
   padding: 1px 8px;
   border-radius: 12px;
   border: 1px solid var(--docket-queue);
-  color: @text-color;
+  color: var(--text-color);
   white-space: nowrap;
 }
 
@@ -139,7 +139,7 @@
   font-size: 22px;
 }
 .DocketReport-sub {
-  color: @muted-color;
+  color: var(--muted-color);
 }
 .DocketReport-grid {
   display: grid;
@@ -159,19 +159,19 @@
 }
 
 .DocketCard {
-  background: @control-bg;
+  background: var(--control-bg);
   border-radius: @border-radius;
   padding: 15px;
   margin-bottom: 15px;
 }
 .DocketCard--muted {
-  color: @muted-color;
+  color: var(--muted-color);
 }
 .DocketCard-title {
   margin: 0 0 10px;
   font-size: 14px;
   text-transform: uppercase;
-  color: @muted-color;
+  color: var(--muted-color);
 }
 
 .DocketPost-head {
@@ -192,7 +192,7 @@
 .DocketPost-where {
   font-weight: normal;
   font-size: 12px;
-  color: @muted-color;
+  color: var(--muted-color);
 }
 .DocketPost-body {
   overflow-wrap: anywhere;
@@ -203,7 +203,7 @@
 .DocketPost-flag,
 .DocketPost-warnings {
   font-size: 13px;
-  color: @muted-color;
+  color: var(--muted-color);
   margin: 8px 0;
 }
 
@@ -230,7 +230,7 @@
   display: block;
   font-size: 12px;
   font-weight: bold;
-  color: @muted-color;
+  color: var(--muted-color);
   margin-bottom: 4px;
 }
 .DocketControls-user {
@@ -244,7 +244,7 @@
   }
 }
 .DocketControls-none {
-  color: @muted-color;
+  color: var(--muted-color);
 }
 .DocketControls-buttons,
 .DocketControls-actions {
@@ -262,7 +262,7 @@
 .DocketControls-told {
   margin-top: 10px;
   font-size: 13px;
-  color: @muted-color;
+  color: var(--muted-color);
 }
 
 .DocketTimeline-item {
@@ -281,13 +281,13 @@
   height: 8px;
   margin: 6px 8px 0;
   border-radius: 50%;
-  background: @muted-color;
+  background: var(--muted-color);
   flex-shrink: 0;
 }
 .DocketTimeline-note {
   flex: 1;
   min-width: 0;
-  background: @body-bg;
+  background: var(--body-bg);
   border-radius: @border-radius;
   padding: 8px 10px;
 }
@@ -295,7 +295,7 @@
 .DocketTimeline-time,
 .DocketTimeline-empty {
   font-size: 12px;
-  color: @muted-color;
+  color: var(--muted-color);
 }
 .DocketTimeline-body {
   white-space: pre-wrap;
@@ -322,11 +322,11 @@
   margin-top: 6px;
 }
 .DocketHistory .DocketItem {
-  background: @body-bg;
+  background: var(--body-bg);
   padding: 8px;
 }
 .DocketHistory-empty {
-  color: @muted-color;
+  color: var(--muted-color);
   margin: 0;
 }
 
@@ -341,7 +341,7 @@
 .DocketMine-excerpt,
 .DocketMine-gone,
 .DocketMine-reason {
-  color: @muted-color;
+  color: var(--muted-color);
   font-size: 13px;
 }
 .DocketMine-what {
