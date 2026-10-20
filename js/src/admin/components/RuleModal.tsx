@@ -1,7 +1,6 @@
 import app from 'flarum/admin/app';
 import FormModal, { type IFormModalAttrs } from 'flarum/common/components/FormModal';
 import Button from 'flarum/common/components/Button';
-import Checkbox from 'flarum/common/components/Checkbox';
 import GroupSelector from 'flarum/common/components/GroupSelector';
 import MultiSelect from 'flarum/common/components/MultiSelect';
 import Select from 'flarum/common/components/Select';
@@ -15,6 +14,7 @@ import type Mithril from 'mithril';
 import type { Queue, Rule } from '../../common/models';
 import { save } from '../api';
 import { t } from '../t';
+import extractText from 'flarum/common/utils/extractText';
 
 export const REASONS = ['off_topic', 'inappropriate', 'spam', 'other'];
 
@@ -72,7 +72,7 @@ export default class RuleModal extends FormModal<RuleModalAttrs> {
   }
 
   content() {
-    const queues: Record<string, string> = { '': String(t('rules.general_queue')) };
+    const queues: Record<string, string> = { '': extractText(t('rules.general_queue')) };
     this.attrs.queues.forEach((q) => (queues[q.id()!] = q.name()));
 
     return (
@@ -106,9 +106,14 @@ export default class RuleModal extends FormModal<RuleModalAttrs> {
               <label>{t('rules.reasons')}</label>
               <div className="DocketRuleModal-checks">
                 {REASONS.map((reason) => (
-                  <Checkbox state={this.reasons().includes(reason)} onchange={(on: boolean) => this.toggleReason(reason, on)}>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={this.reasons().includes(reason)}
+                      onchange={(e: Event) => this.toggleReason(reason, (e.target as HTMLInputElement).checked)}
+                    />
                     {t(`reasons.${reason}`)}
-                  </Checkbox>
+                  </label>
                 ))}
               </div>
             </div>
@@ -140,7 +145,11 @@ export default class RuleModal extends FormModal<RuleModalAttrs> {
               <label for="docket-rule-mode">{t('rules.assign')}</label>
               <Select
                 id="docket-rule-mode"
-                options={{ none: String(t('rules.assign_none')), user: String(t('rules.assign_user')), group: String(t('rules.assign_group')) }}
+                options={{
+                  none: extractText(t('rules.assign_none')),
+                  user: extractText(t('rules.assign_user')),
+                  group: extractText(t('rules.assign_group')),
+                }}
                 value={this.mode()}
                 onchange={this.mode}
               />

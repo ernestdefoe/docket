@@ -10,6 +10,7 @@ import SortableList from './SortableList';
 import QueueModal from './QueueModal';
 import RuleModal, { REASONS } from './RuleModal';
 import { t } from '../t';
+import extractText from 'flarum/common/utils/extractText';
 
 /**
  * Queues and auto-assignment rules, each in the order they are listed and
@@ -144,7 +145,7 @@ export default class DocketSettings extends Component {
       when.push(
         c.reasons
           .filter((r) => REASONS.includes(r))
-          .map((r) => String(t(`reasons.${r}`)))
+          .map((r) => extractText(t(`reasons.${r}`)))
           .join(', ')
       );
     if (c.types?.length) when.push(c.types.join(', '));
@@ -161,9 +162,9 @@ export default class DocketSettings extends Component {
     const queue = rule.queue() || null;
     const assignee = rule.assignee() || null;
     const group = rule.assigneeGroup() || null;
-    if (queue) then.push(String(t('rules.summary_queue', { queue: queue.name() })));
-    if (assignee) then.push(String(t('rules.summary_user', { name: assignee.displayName() })));
-    if (group) then.push(String(t('rules.summary_group', { group: group.namePlural() })));
+    if (queue) then.push(extractText(t('rules.summary_queue', { queue: queue.name() })));
+    if (assignee) then.push(extractText(t('rules.summary_user', { name: assignee.displayName() })));
+    if (group) then.push(extractText(t('rules.summary_group', { group: group.namePlural() })));
 
     return (
       <div className={'DocketSettings-row' + (rule.isEnabled() ? '' : ' is-disabled')}>
@@ -171,8 +172,8 @@ export default class DocketSettings extends Component {
           <strong>{rule.name()}</strong> {rule.isEnabled() ? null : <span className="DocketSettings-off">{t('rules.off')}</span>}
           <div className="helpText">
             {t('rules.summary', {
-              when: when.filter(Boolean).join(' · ') || String(t('rules.any_report')),
-              then: then.join(', ') || String(t('rules.nothing')),
+              when: when.filter(Boolean).join(' · ') || extractText(t('rules.any_report')),
+              then: then.join(', ') || extractText(t('rules.nothing')),
             })}
           </div>
         </div>

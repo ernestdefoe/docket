@@ -79,6 +79,7 @@ ernestdefoe-docket:
       reporters: "{count, plural, one {Reported once} other {Reported # times}}"
       system: Automatic
       held_by: Held by
+      handled_by: Handled by
       no_one: No one yet
       claim: Claim
       release: Release

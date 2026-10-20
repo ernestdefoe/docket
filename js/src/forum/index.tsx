@@ -5,7 +5,6 @@ import LinkButton from 'flarum/common/components/LinkButton';
 import IndexSidebar from 'flarum/forum/components/IndexSidebar';
 import SessionDropdown from 'flarum/forum/components/SessionDropdown';
 import UserPage from 'flarum/forum/components/UserPage';
-import NotificationGrid from 'flarum/forum/components/NotificationGrid';
 import Post from 'flarum/forum/components/Post';
 import FlagList from 'ext:flarum/flags/forum/components/FlagList';
 import { t } from './t';
@@ -74,7 +73,9 @@ app.initializers.add('ernestdefoe-docket', () => {
     );
   });
 
-  extend(NotificationGrid.prototype, 'notificationTypes', (items) => {
+  // 🚨 By module name: NotificationGrid is in a lazy chunk in Flarum 2, so a
+  // static import of it is undefined when initializers run.
+  extend('flarum/forum/components/NotificationGrid', 'notificationTypes', (items: any) => {
     if (isStaff()) {
       items.add('docketAssigned', { name: 'docketAssigned', icon: 'fas fa-clipboard-list', label: t('settings.notify_assigned') });
     }

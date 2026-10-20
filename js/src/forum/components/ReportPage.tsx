@@ -17,10 +17,11 @@ import type Post from 'flarum/common/models/Post';
 import type User from 'flarum/common/models/User';
 import type { Queue, Report, ReportEvent } from '../../common/models';
 import { updateReport } from '../api';
-import { StatusBadge, eventText, reasonLabel } from '../labels';
+import { statusBadge, eventText, reasonLabel } from '../labels';
 import CloseReportModal from './CloseReportModal';
 import ReportList from './ReportList';
 import { t } from '../t';
+import extractText from 'flarum/common/utils/extractText';
 
 /**
  * One report: the post, who reported it and why, who holds it, its queue
@@ -87,7 +88,7 @@ export default class ReportPage extends Page {
                 {t('nav.report_centre')}
               </LinkButton>
               <h2 className="DocketReport-title">
-                {t('report.title', { id: report.id() })} <StatusBadge status={report.status()} />
+                {t('report.title', { id: report.id() })} {statusBadge(report.status())}
               </h2>
               <div className="DocketReport-sub">{t('report.opened', { time: humanTime(report.createdAt()!) })}</div>
             </div>
@@ -207,7 +208,7 @@ export default class ReportPage extends Page {
     return (
       <section className="DocketCard DocketControls">
         <div className="DocketControls-row">
-          <div className="DocketControls-label">{t('report.held_by')}</div>
+          <div className="DocketControls-label">{t(active ? 'report.held_by' : 'report.handled_by')}</div>
           <div className="DocketControls-holder">
             {assignee ? (
               <span className="DocketControls-user">
@@ -292,7 +293,7 @@ export default class ReportPage extends Page {
   }
 
   queueOptions(report: Report) {
-    const options: Record<string, string> = { '': String(t('queues.general')) };
+    const options: Record<string, string> = { '': extractText(t('queues.general')) };
     this.queues.forEach((q) => (options[q.id()!] = q.name()));
 
     // The report's own queue even when it is not in the list loaded.
@@ -325,7 +326,22 @@ export default class ReportPage extends Page {
   }
 
   close(report: Report, status: 'resolved' | 'rejected') {
-    app.modal.show(CloseReportModal, { report, status, onclosed: () => this.load() });
+    app.modal.show(CloseReportModal, {
+      report,
+      status,
+      onclosed: () => {
+        // Its flags were dismissed with it: the flags dropdown and its count
+        // are out of date.
+        const flags = (app as any).flags;
+        if (flags) flags.cache = null;
+        const count = app.session.user?.attribute<number>('newFlagCount');
+        if (count) app.session.user!.pushAttributes({ newFlagCount: count - 1 });
+        const total = app.forum.attribute<number>('flagCount');
+        if (total) app.forum.pushAttributes({ flagCount: total - 1 });
+
+        this.load();
+      },
+    });
   }
 
   timeline(report: Report) {

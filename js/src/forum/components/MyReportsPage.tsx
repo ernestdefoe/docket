@@ -8,7 +8,7 @@ import humanTime from 'flarum/common/helpers/humanTime';
 import { truncate } from 'flarum/common/utils/string';
 import type Mithril from 'mithril';
 import type { Entry } from '../../common/models';
-import { StatusBadge, reasonLabel } from '../labels';
+import { statusBadge, reasonLabel } from '../labels';
 import { t } from '../t';
 
 /**
@@ -63,7 +63,7 @@ export default class MyReportsPage extends Page {
               return (
                 <li className="DocketCard DocketMine-item" key={entry.id()}>
                   <div className="DocketMine-head">
-                    <StatusBadge status={entry.reportStatus()} />
+                    {statusBadge(entry.reportStatus())}
                     <span className="DocketMine-when">{humanTime(entry.createdAt()!)}</span>
                   </div>
                   <div className="DocketMine-what">

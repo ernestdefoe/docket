@@ -6,8 +6,9 @@ import username from 'flarum/common/helpers/username';
 import humanTime from 'flarum/common/helpers/humanTime';
 import { truncate } from 'flarum/common/utils/string';
 import type { Report } from '../../common/models';
-import { StatusBadge, reasonLabel } from '../labels';
+import { statusBadge, reasonLabel } from '../labels';
 import { t } from '../t';
+import extractText from 'flarum/common/utils/extractText';
 
 export interface ReportListItemAttrs extends ComponentAttrs {
   report: Report;
@@ -22,7 +23,7 @@ export default class ReportListItem extends Component<ReportListItemAttrs> {
     const assignee = report.assignee();
 
     // One of each reason, in the order they came.
-    const reasons = Array.from(new Set((report.entries() || []).filter(Boolean).map((entry) => String(reasonLabel(entry!)))));
+    const reasons = Array.from(new Set((report.entries() || []).filter(Boolean).map((entry) => extractText(reasonLabel(entry!)))));
 
     return (
       <Link href={app.route('docket.report', { id: report.id() })} className="DocketItem">
@@ -40,7 +41,7 @@ export default class ReportListItem extends Component<ReportListItemAttrs> {
           </div>
         </div>
         <div className="DocketItem-side">
-          <StatusBadge status={report.status()} />
+          {statusBadge(report.status())}
           {queue ? (
             <span className="DocketQueueChip" style={queue.color() ? { '--docket-queue': queue.color() } : undefined}>
               {queue.name()}

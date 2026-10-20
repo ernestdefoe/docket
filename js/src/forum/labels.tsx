@@ -12,7 +12,8 @@ export const STATUS_ICONS: Record<string, string> = {
   closed: 'fas fa-circle-minus',
 };
 
-export function StatusBadge({ status }: { status: Status | 'closed' }) {
+/** A report's status as a pill. A helper, not a component: Mithril has no function components. */
+export function statusBadge(status: Status | 'closed') {
   return (
     <span className={`DocketStatus DocketStatus--${status}`}>
       <i className={STATUS_ICONS[status]} aria-hidden="true" /> {t(`status.${status}`)}
