@@ -1,0 +1,17 @@
+ernestdefoe-docket:
+  api:
+    closed: Reopen this report first.
+    assign_others: You don't have permission to assign reports to other moderators.
+    cannot_see: That member can't see this report, so it can't be assigned to them.
+
+  email:
+    assigned:
+      subject: "Report #{id} was assigned to you"
+      title: "Report #{id} is yours"
+      body: "Report #{id} was assigned to you. Open the report centre to review it."
+      link: Open the report
+    outcome:
+      subject: Your report was reviewed
+      body_resolved: Thanks for your report. A moderator reviewed it and took action.
+      body_rejected: Thanks for your report. A moderator reviewed it and decided no action was needed.
+      link: See your reports
