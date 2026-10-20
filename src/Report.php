@@ -96,11 +96,13 @@ class Report extends AbstractModel
         return $this->belongsTo(User::class, 'closed_by_id');
     }
 
+    /** @return HasMany<Entry, $this> */
     public function entries(): HasMany
     {
         return $this->hasMany(Entry::class);
     }
 
+    /** @return HasMany<ReportEvent, $this> */
     public function events(): HasMany
     {
         return $this->hasMany(ReportEvent::class);

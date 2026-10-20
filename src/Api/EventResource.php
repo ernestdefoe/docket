@@ -5,7 +5,6 @@ namespace ErnestDefoe\Docket\Api;
 use Carbon\Carbon;
 use ErnestDefoe\Docket\Report;
 use ErnestDefoe\Docket\ReportEvent;
-use Flarum\Api\Context as FlarumContext;
 use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\AbstractDatabaseResource;
 use Flarum\Api\Schema;

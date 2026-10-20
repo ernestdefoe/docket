@@ -4,6 +4,8 @@ namespace ErnestDefoe\Docket\Api;
 
 use Carbon\Carbon;
 use ErnestDefoe\Docket\Queue;
+use ErnestDefoe\Docket\Report;
+use ErnestDefoe\Docket\Rule;
 use Flarum\Api\Context as FlarumContext;
 use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\AbstractDatabaseResource;
@@ -104,6 +106,19 @@ class QueueResource extends AbstractDatabaseResource
         Queue::forgetAccessMap();
 
         return parent::saved($model, $context);
+    }
+
+    /**
+     * Its reports go back to the general queue and its rules lose their
+     * queue. The foreign keys do this too, but not on every database.
+     */
+    public function deleting(object $model, Context $context): void
+    {
+        Report::query()->where('queue_id', $model->id)->update(['queue_id' => null]);
+        Rule::query()->where('queue_id', $model->id)->update(['queue_id' => null]);
+        $model->groups()->detach();
+
+        parent::deleting($model, $context);
     }
 
     public function deleted(object $model, Context $context): void
