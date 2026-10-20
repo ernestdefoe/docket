@@ -11,7 +11,7 @@ use Flarum\Group\Event\Deleted as GroupDeleted;
 use Flarum\Post\Event\Deleted;
 use Flarum\Post\Event\Hidden;
 use Flarum\Post\Event\Restored;
-use Flarum\User\Event\Deleted as UserDeleted;
+use Flarum\User\Event\Deleting as UserDeleting;
 use Illuminate\Contracts\Events\Dispatcher;
 
 /**
@@ -45,7 +45,9 @@ class RecordActivity
         // from you: refused, as the report and the flags are hidden from you.
         $events->listen(FlagDeleting::class, fn (FlagDeleting $event) => $this->docket()->assertMayDismiss($event->flag->post_id, $event->actor));
 
-        $events->listen(UserDeleted::class, fn (UserDeleted $event) => $this->docket()->userDeleted($event->user->id));
+        // Deleting, not Deleted: by then the foreign key has already emptied
+        // assignee_id on MySQL and PostgreSQL, and the reports can't be found.
+        $events->listen(UserDeleting::class, fn (UserDeleting $event) => $this->docket()->userDeleted($event->user->id));
         $events->listen(GroupDeleted::class, fn () => Queue::forgetAccessMap());
     }
 }

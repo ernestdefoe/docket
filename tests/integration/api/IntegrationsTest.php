@@ -71,8 +71,11 @@ class IntegrationsTest extends DocketTestCase
     public function reports_in_private_discussions_follow_byobu(): void
     {
         $now = Carbon::now();
-        $this->database()->table('discussions')->insert(['id' => 6, 'title' => 'Private talk', 'slug' => 'private', 'user_id' => self::AUTHOR, 'created_at' => $now, 'last_posted_at' => $now, 'comment_count' => 1, 'participant_count' => 1, 'first_post_id' => 6, 'last_post_id' => 6, 'last_post_number' => 1, 'is_private' => 1]);
+        // The discussion first without its post, then the post, then the link
+        // between them: the foreign keys go both ways.
+        $this->database()->table('discussions')->insert(['id' => 6, 'title' => 'Private talk', 'slug' => 'private', 'user_id' => self::AUTHOR, 'created_at' => $now, 'last_posted_at' => $now, 'comment_count' => 1, 'participant_count' => 1, 'last_post_number' => 1, 'is_private' => 1]);
         $this->database()->table('posts')->insert(['id' => 6, 'discussion_id' => 6, 'user_id' => self::AUTHOR, 'type' => 'comment', 'content' => '<t><p>Just us</p></t>', 'number' => 1, 'created_at' => $now]);
+        $this->database()->table('discussions')->where('id', 6)->update(['first_post_id' => 6, 'last_post_id' => 6]);
         $this->database()->table('recipients')->insert([
             ['discussion_id' => 6, 'user_id' => self::AUTHOR, 'created_at' => $now, 'updated_at' => $now],
             ['discussion_id' => 6, 'user_id' => self::REPORTER, 'created_at' => $now, 'updated_at' => $now],
