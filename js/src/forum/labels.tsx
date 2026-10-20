@@ -29,7 +29,8 @@ export function reasonLabel(entry: Entry): Mithril.Children {
   if (type !== 'user') return t('reason.raised_by', { type });
 
   const reason = entry.reason();
-  if (!reason) return t('reason.other');
+  // flarum/flags words "other" for its form ("please specify").
+  if (!reason || reason === 'other') return t('reason.other');
 
   const key = `flarum-flags.forum.flag_post.reason_${reason}_label`;
   const label = app.translator.trans(key);

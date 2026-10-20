@@ -147,17 +147,24 @@
 .DocketReport-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 20px;
+  gap: 0 20px;
   align-items: start;
 
   @media @phone, @tablet {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-// On a phone the actions come first: they are what you came for.
+// On a phone the actions come first, they are what you came for; the
+// history stays after the post.
 @media @phone {
   .DocketReport-side {
+    display: contents;
+  }
+  .DocketControls {
     order: -1;
+  }
+  .DocketPost-controls .Button-label {
+    display: none;
   }
 }
 
