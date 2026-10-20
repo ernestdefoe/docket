@@ -203,7 +203,7 @@ ernestdefoe-docket:
       assign_user_help: Skipped when that moderator can't see the report.
       assign_group_help: Whoever in the group holds the fewest open reports and can see this one.
       save: Save rule
-      off: Off
+      disabled_badge: Off
       summary: "{when} → {then}"
       any_report: Any report
       nothing: nothing

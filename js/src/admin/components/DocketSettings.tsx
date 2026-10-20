@@ -171,7 +171,7 @@ export default class DocketSettings extends Component {
     return (
       <div className={'DocketSettings-row' + (rule.isEnabled() ? '' : ' is-disabled')}>
         <div className="DocketSettings-text">
-          <strong>{rule.name()}</strong> {rule.isEnabled() ? null : <span className="DocketSettings-off">{t('rules.off')}</span>}
+          <strong>{rule.name()}</strong> {rule.isEnabled() ? null : <span className="DocketSettings-off">{t('rules.disabled_badge')}</span>}
           <div className="helpText">
             {t('rules.summary', {
               when: when.filter(Boolean).join(' · ') || extractText(t('rules.any_report')),
