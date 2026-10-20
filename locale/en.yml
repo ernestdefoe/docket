@@ -82,6 +82,7 @@ ernestdefoe-docket:
       handled_by: Handled by
       no_one: No one yet
       claim: Claim
+      take_over: Take over
       release: Release
       unassign: Unassign
       assign: Assign…

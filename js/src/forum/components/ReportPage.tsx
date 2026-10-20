@@ -34,6 +34,8 @@ export default class ReportPage extends Page {
   note = Stream('');
   saving = false;
   busy = false;
+  /** A moderation control opened a modal (Edit, Warn): reload once it closes. */
+  watchModal: 'none' | 'open' = 'none';
 
   oninit(vnode: Mithril.Vnode) {
     super.oninit(vnode);
@@ -51,6 +53,19 @@ export default class ReportPage extends Page {
       .then((queues) => (this.queues = queues))
       .catch(() => {})
       .finally(() => m.redraw());
+  }
+
+  onupdate(vnode: Mithril.VnodeDOM) {
+    super.onupdate(vnode);
+
+    if (this.watchModal === 'open' && !this.modalOpening()) {
+      this.watchModal = 'none';
+      this.load();
+    }
+  }
+
+  modalOpening() {
+    return app.modal.isModalOpen() || app.modal.loadingModal || app.modal.backdropShown;
   }
 
   load() {
@@ -121,8 +136,11 @@ export default class ReportPage extends Page {
       if (!original) return;
       item.attrs.onclick = (e: MouseEvent) => {
         const result = original(e);
-        // The extension logs what was done; show it once it has been.
-        Promise.resolve(result).finally(() => setTimeout(() => this.load(), 300));
+        // Show what was done once it has been: when the action opened a
+        // modal (Edit, Warn), after the modal closes; otherwise when it
+        // finishes.
+        if (this.modalOpening()) this.watchModal = 'open';
+        else Promise.resolve(result).finally(() => setTimeout(() => this.load(), 300));
         return result;
       };
     });
@@ -222,7 +240,7 @@ export default class ReportPage extends Page {
             <div className="DocketControls-buttons">
               {!mine && (!assignee || mayHandOver) ? (
                 <Button className="Button Button--primary" icon="fas fa-hand" loading={this.busy} onclick={() => this.change({}, { assignee: me })}>
-                  {t('report.claim')}
+                  {t(assignee ? 'report.take_over' : 'report.claim')}
                 </Button>
               ) : null}
               {assignee && (mine || mayHandOver) ? (
