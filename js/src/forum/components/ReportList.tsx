@@ -53,7 +53,7 @@ export default class ReportList extends Component<ReportListAttrs> {
     app.store
       .find<Report[]>('docket-reports', {
         filter: this.attrs.filter,
-        include: 'post,post.user,post.discussion,user,assignee,queue,entries',
+        include: 'post,post.user,user,assignee,queue,entries',
         page: { offset, limit: this.attrs.limit || 20 },
       })
       .then((results) => {

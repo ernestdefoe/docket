@@ -83,14 +83,12 @@ return [
         ->subscribe(RecordActivity::class),
 
     (new Extend\Conditional())
-        // Each report and entry shows its post's discussion, which flarum/tags
-        // reads the tags of: load them for the whole page, as tags does for
-        // flags.
+        // Permission checks on each post read its discussion's tags: load
+        // them for the whole page, as flarum/tags does for flags.
         ->whenExtensionEnabled('flarum-tags', fn () => [
             (new Extend\ApiResource(Api\ReportResource::class))
-                ->endpoint([Endpoint\Index::class, Endpoint\Show::class], fn (Endpoint\Index|Endpoint\Show $endpoint) => $endpoint->eagerLoadWhenIncluded(['post.discussion' => ['post.discussion.tags']])),
-            (new Extend\ApiResource(Api\EntryResource::class))
-                ->endpoint(Endpoint\Index::class, fn (Endpoint\Index $endpoint) => $endpoint->eagerLoadWhenIncluded(['post.discussion' => ['post.discussion.tags']])),
+                ->endpoint(Endpoint\Index::class, fn (Endpoint\Index $endpoint) => $endpoint->eagerLoad(['post.discussion.tags']))
+                ->endpoint(Endpoint\Show::class, fn (Endpoint\Show $endpoint) => $endpoint->eagerLoadWhenIncluded(['post.discussion' => ['post.discussion.tags']])),
         ])
         ->whenExtensionEnabled('flarum-approval', fn () => [
             (new Extend\Event())

@@ -10,10 +10,14 @@ use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\AbstractDatabaseResource;
 use Flarum\Api\Schema;
 use Flarum\Api\Sort\SortColumn;
+use Flarum\Discussion\Discussion;
 use Flarum\Foundation\ValidationException;
+use Flarum\Http\SlugManager;
 use Flarum\Locale\TranslatorInterface;
+use Flarum\Post\Post;
 use Flarum\User\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Tobyz\JsonApiServer\Context;
 use WeakMap;
 
@@ -61,10 +65,13 @@ class ReportResource extends AbstractDatabaseResource
     public function endpoints(): array
     {
         return [
+            // The list shows each post's discussion by title only: a plain
+            // attribute, not the discussion resource, which other extensions
+            // add fields to that cost queries per discussion.
             Endpoint\Index::make()
                 ->authenticated()
-                ->defaultInclude(['post', 'post.user', 'post.discussion', 'user', 'assignee', 'queue'])
-                ->eagerLoad(['post.discussion.state', 'post.user.groups', 'user.groups', 'assignee.groups'])
+                ->defaultInclude(['post', 'post.user', 'user', 'assignee', 'queue'])
+                ->eagerLoad(['post.discussion', 'post.user.groups', 'user.groups', 'assignee.groups'])
                 ->defaultSort('-updatedAt')
                 ->paginate(20, 50),
             Endpoint\Show::make()
@@ -98,6 +105,12 @@ class ReportResource extends AbstractDatabaseResource
             Schema\Boolean::make('reportersNotified')
                 ->property('reporters_notified'),
             Schema\Integer::make('entryCount'),
+            // Where the post is: its discussion's id, slug and title. The
+            // report is only seen by someone who can see the post, and so
+            // its discussion.
+            Schema\Arr::make('discussion')
+                ->nullable()
+                ->get(fn (Report $report) => $this->withPost($report)),
             Schema\DateTime::make('createdAt'),
             Schema\DateTime::make('updatedAt'),
             Schema\DateTime::make('closedAt'),
@@ -133,6 +146,54 @@ class ReportResource extends AbstractDatabaseResource
             Schema\Relationship\ToMany::make('events')
                 ->type('docket-events')
                 ->includable(),
+        ];
+    }
+
+    /** @var Report[] reports serialized without their post loaded */
+    protected array $waiting = [];
+
+    /**
+     * The place of a report's post. Reports serialized without their post
+     * (the subjects of notifications) wait, and the first of them to be read
+     * loads the posts and discussions of all of them: a getter that returns
+     * a closure is resolved after every other getter.
+     */
+    protected function withPost(Report $report): mixed
+    {
+        if ($report->relationLoaded('post') && (! $report->post || $report->post->relationLoaded('discussion'))) {
+            return self::place($report->post);
+        }
+
+        $this->waiting[] = $report;
+
+        return function () use ($report) {
+            if ($this->waiting) {
+                (new Collection($this->waiting))->load('post.discussion');
+                $this->waiting = [];
+            }
+
+            return self::place($report->post);
+        };
+    }
+
+    /**
+     * Where a post is, for a link to it: its discussion's slug (as the
+     * forum's slug driver writes it) and title, and the post's number.
+     *
+     * @return array{slug: string, title: string, number: int}|null
+     */
+    public static function place(?Post $post): ?array
+    {
+        $discussion = $post?->discussion;
+
+        if (! $discussion) {
+            return null;
+        }
+
+        return [
+            'slug' => resolve(SlugManager::class)->forResource(Discussion::class)->toSlug($discussion),
+            'title' => (string) $discussion->title,
+            'number' => (int) $post->number,
         ];
     }
 

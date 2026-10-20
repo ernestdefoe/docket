@@ -187,9 +187,17 @@ class WorkflowTest extends DocketTestCase
         $this->assertCount(2, $this->json($this->get('/api/docket-entries', self::OTHER))['data']);
 
         // Post 1 is hidden afterwards: the reporter keeps the entry, not the post.
-        $this->patch('/api/posts/1', self::MOD, ['data' => ['type' => 'posts', 'id' => '1', 'attributes' => ['isHidden' => true]]]);
-        $entry = $this->json($this->get('/api/docket-entries', self::REPORTER))['data'][0];
-        $this->assertNull($entry['relationships']['post']['data'] ?? null);
+        $hide = $this->patch('/api/posts/1', self::MOD, ['data' => ['type' => 'posts', 'id' => '1', 'attributes' => ['isHidden' => true]]]);
+        $this->assertSame(200, $hide->getStatusCode(), (string) $hide->getBody());
+        $this->assertNotNull($this->database()->table('posts')->where('id', 1)->value('hidden_at'));
+        $this->assertSame(404, $this->get('/api/posts/1', self::REPORTER)->getStatusCode(), 'the reporter can no longer see the post');
+        $entries = $this->json($this->get('/api/docket-entries', self::REPORTER))['data'];
+        $this->assertNull($entries[0]['attributes']['post']);
+
+        // Post 2 they can still see: a link and its discussion's title.
+        $other = $this->json($this->get('/api/docket-entries', self::OTHER))['data'];
+        $places = array_column(array_column($other, 'attributes'), 'post');
+        $this->assertContains(['slug' => '2-d2', 'title' => 'Games chat', 'number' => 1], $places);
     }
 
     #[Test]

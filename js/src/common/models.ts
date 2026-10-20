@@ -14,6 +14,9 @@ export class Queue extends Model {
   groups = Model.hasMany<Group>('groups');
 }
 
+/** Where a post is: its discussion's slug and title, and the post's number. */
+export type Place = { slug: string; title: string; number: number } | null;
+
 export class Entry extends Model {
   type = Model.attribute<string>('type');
   reason = Model.attribute<string | null>('reason');
@@ -22,7 +25,7 @@ export class Entry extends Model {
   reportStatus = Model.attribute<Status | 'closed'>('reportStatus');
   outcome = Model.attribute<string | null>('outcome');
   user = Model.hasOne<User | null>('user');
-  post = Model.hasOne<Post | null>('post');
+  place = Model.attribute<Place>('post');
 }
 
 export class ReportEvent extends Model {
@@ -39,6 +42,7 @@ export class Report extends Model {
   outcome = Model.attribute<string | null>('outcome');
   reportersNotified = Model.attribute<boolean>('reportersNotified');
   entryCount = Model.attribute<number>('entryCount');
+  place = Model.attribute<Place>('discussion');
   createdAt = Model.attribute<Date | undefined, string>('createdAt', Model.transformDate);
   updatedAt = Model.attribute<Date | undefined, string>('updatedAt', Model.transformDate);
   closedAt = Model.attribute<Date | null | undefined, string | null>('closedAt', Model.transformDate);

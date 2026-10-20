@@ -5,10 +5,9 @@ import Link from 'flarum/common/components/Link';
 import LoadingIndicator from 'flarum/common/components/LoadingIndicator';
 import Placeholder from 'flarum/common/components/Placeholder';
 import humanTime from 'flarum/common/helpers/humanTime';
-import { truncate } from 'flarum/common/utils/string';
 import type Mithril from 'mithril';
 import type { Entry } from '../../common/models';
-import { statusBadge, reasonLabel } from '../labels';
+import { placeUrl, statusBadge, reasonLabel } from '../labels';
 import { t } from '../t';
 
 /**
@@ -57,8 +56,7 @@ export default class MyReportsPage extends Page {
           {!this.loading && !this.entries.length ? <Placeholder text={t('mine.empty')} /> : null}
           <ul className="DocketMine">
             {this.entries.map((entry) => {
-              const post = entry.post();
-              const discussion = post ? post.discussion() : null;
+              const place = entry.place();
 
               return (
                 <li className="DocketCard DocketMine-item" key={entry.id()}>
@@ -67,12 +65,11 @@ export default class MyReportsPage extends Page {
                     <span className="DocketMine-when">{humanTime(entry.createdAt()!)}</span>
                   </div>
                   <div className="DocketMine-what">
-                    {post && discussion ? (
-                      <Link href={app.route.post(post)}>{discussion.title()}</Link>
+                    {place ? (
+                      <Link href={placeUrl(place)}>{place.title}</Link>
                     ) : (
                       <span className="DocketMine-gone">{t('mine.post_unavailable')}</span>
                     )}
-                    {post ? <div className="DocketMine-excerpt">{truncate(post.contentPlain() || '', 140)}</div> : null}
                   </div>
                   <div className="DocketMine-reason">
                     {t('mine.your_reason')} {reasonLabel(entry)}

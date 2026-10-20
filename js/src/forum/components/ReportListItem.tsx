@@ -18,7 +18,7 @@ export default class ReportListItem extends Component<ReportListItemAttrs> {
   view() {
     const report = this.attrs.report;
     const post = report.post();
-    const discussion = post ? post.discussion() : null;
+    const place = report.place();
     const queue = report.queue();
     const assignee = report.assignee();
 
@@ -30,7 +30,7 @@ export default class ReportListItem extends Component<ReportListItemAttrs> {
         <Avatar user={report.user() || null} className="DocketItem-avatar" />
         <div className="DocketItem-main">
           <div className="DocketItem-title">
-            <span className="DocketItem-id">#{report.id()}</span> {discussion ? discussion.title() : t('list.post_gone')}
+            <span className="DocketItem-id">#{report.id()}</span> {place ? place.title : t('list.post_gone')}
           </div>
           {post ? <div className="DocketItem-excerpt">{truncate(post.contentPlain() || '', 160)}</div> : null}
           <div className="DocketItem-meta">

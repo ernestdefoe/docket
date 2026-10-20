@@ -4,13 +4,17 @@ namespace ErnestDefoe\Docket\Api;
 
 use ErnestDefoe\Docket\Entry;
 use ErnestDefoe\Docket\Report;
+use Flarum\Api\Context as FlarumContext;
 use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\AbstractDatabaseResource;
 use Flarum\Api\Schema;
 use Flarum\Api\Sort\SortColumn;
+use Flarum\Post\Post;
+use Flarum\User\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Tobyz\JsonApiServer\Context;
+use WeakMap;
 
 /**
  * The flags in a report, kept after the flags are gone.
@@ -47,8 +51,7 @@ class EntryResource extends AbstractDatabaseResource
         return [
             Endpoint\Index::make()
                 ->authenticated()
-                ->defaultInclude(['post', 'post.discussion'])
-                ->eagerLoad(['report', 'post.discussion.state'])
+                ->eagerLoad(['report'])
                 ->defaultSort('-createdAt')
                 ->paginate(20, 50),
         ];
@@ -75,14 +78,62 @@ class EntryResource extends AbstractDatabaseResource
                 ->nullable()
                 ->get(fn (Entry $entry) => $this->withReport($entry, fn (Report $report) => $report->reporters_notified ? $report->outcome : null)),
 
+            // The reported post, as a link and a discussion title, while the
+            // actor can still see it; null once they can't.
+            Schema\Arr::make('post')
+                ->nullable()
+                ->get(fn (Entry $entry, FlarumContext $context) => $this->place($entry, $context)),
+
             Schema\Relationship\ToOne::make('user')
                 ->type('users')
                 ->includable()
                 ->nullable(),
-            Schema\Relationship\ToOne::make('post')
-                ->includable()
-                ->nullable(),
         ];
+    }
+
+    /** @var Entry[] */
+    protected array $placing = [];
+
+    /**
+     * The posts placed so far, by the actor they were looked up for: a
+     * resource can outlive a request, and what one actor sees is not what
+     * another does.
+     *
+     * @var WeakMap<User, array<int, Post|null>>|null
+     */
+    protected ?WeakMap $places = null;
+
+    /**
+     * The post's place, looked up for every entry on the page at once: one
+     * visibility query for all of them.
+     */
+    protected function place(Entry $entry, FlarumContext $context): mixed
+    {
+        if (! $entry->post_id) {
+            return null;
+        }
+
+        $this->placing[] = $entry;
+
+        return function () use ($entry, $context) {
+            $actor = $context->getActor();
+            $this->places ??= new WeakMap();
+            $known = $this->places[$actor] ?? [];
+
+            if ($this->placing) {
+                $ids = array_diff(array_unique(array_map(fn (Entry $e) => (int) $e->post_id, $this->placing)), array_keys($known));
+                $found = $ids ? Post::whereVisibleTo($actor)->whereIn('posts.id', $ids)->with('discussion')->get()->keyBy('id')->all() : [];
+
+                foreach ($ids as $id) {
+                    $known[(int) $id] = $found[$id] ?? null;
+                }
+
+                $this->places[$actor] = $known;
+                $this->placing = [];
+            }
+
+            return ReportResource::place($known[$entry->post_id] ?? null);
+        };
     }
 
     /**

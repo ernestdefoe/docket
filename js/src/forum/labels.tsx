@@ -1,7 +1,7 @@
 import app from 'flarum/forum/app';
 import username from 'flarum/common/helpers/username';
 import type Mithril from 'mithril';
-import type { Entry, ReportEvent, Status } from '../common/models';
+import type { Entry, Place, ReportEvent, Status } from '../common/models';
 import { t } from './t';
 
 export const STATUS_ICONS: Record<string, string> = {
@@ -19,6 +19,11 @@ export function statusBadge(status: Status | 'closed') {
       <i className={STATUS_ICONS[status]} aria-hidden="true" /> {t(`status.${status}`)}
     </span>
   );
+}
+
+/** A link to a post from its place. */
+export function placeUrl(place: NonNullable<Place>): string {
+  return place.number > 1 ? app.route('discussion.near', { id: place.slug, near: place.number }) : app.route('discussion', { id: place.slug });
 }
 
 /** What a flag said, worded as flarum/flags words it. */
