@@ -8,6 +8,7 @@ use ErnestDefoe\Docket\Notification\ReportOutcomeBlueprint;
 use Flarum\Extension\ExtensionManager;
 use Flarum\Flags\Command\DeleteFlags;
 use Flarum\Flags\Flag;
+use Flarum\Notification\Blueprint\BlueprintInterface;
 use Flarum\Notification\NotificationSyncer;
 use Flarum\Post\Post;
 use Flarum\User\User;
@@ -49,7 +50,18 @@ class Docket
      */
     public function file(Flag $flag, bool $notify = true): void
     {
-        $post = $flag->post_id ? Post::query()->find($flag->post_id) : null;
+        if (! $flag->post_id) {
+            return;
+        }
+
+        // Two flags on one post at the same moment must land in one report:
+        // the post row is locked while its open report is looked up.
+        Post::query()->getConnection()->transaction(fn () => $this->fileLocked($flag, $notify));
+    }
+
+    protected function fileLocked(Flag $flag, bool $notify): void
+    {
+        $post = Post::query()->whereKey($flag->post_id)->lockForUpdate()->first();
 
         if (! $post) {
             return;
@@ -287,7 +299,7 @@ class Docket
         }
 
         if ($notify && $to && $to->id !== $by?->id) {
-            $this->notifications->sync(new ReportAssignedBlueprint($report, $by), [$to]);
+            $this->send(new ReportAssignedBlueprint($report, $by), $to);
         }
     }
 
@@ -376,9 +388,18 @@ class Docket
 
         foreach ($entries as $entry) {
             if ($entry->user) {
-                $this->notifications->sync(new ReportOutcomeBlueprint($entry, $status, $message), [$entry->user]);
+                $this->send(new ReportOutcomeBlueprint($entry, $status, $message), $entry->user);
             }
         }
+    }
+
+    /**
+     * Notify once the change is committed: a mail error must not undo it,
+     * and nobody is told about a change that was rolled back.
+     */
+    protected function send(BlueprintInterface $blueprint, User $user): void
+    {
+        Report::query()->getConnection()->afterCommit(fn () => $this->notifications->sync($blueprint, [$user]));
     }
 
     /**
@@ -387,20 +408,23 @@ class Docket
      */
     public function cleared(Post $post, ?User $actor): void
     {
-        if (isset($this->closing[$post->id]) || ! $report = $this->activeReport($post->id)) {
+        if (isset($this->closing[$post->id])) {
             return;
         }
 
-        $acted = ! $post->exists || $report->events()->whereIn('type', self::ACTIONS)->exists();
         $now = Carbon::now();
 
-        $report->status = $acted ? Report::RESOLVED : Report::REJECTED;
-        $report->closed_at = $now;
-        $report->closed_by_id = $actor?->id;
-        $report->updated_at = $now;
-        $report->save();
+        foreach (Report::query()->where('post_id', $post->id)->whereIn('status', Report::ACTIVE)->get() as $report) {
+            $acted = ! $post->exists || $report->events()->whereIn('type', self::ACTIONS)->exists();
 
-        $report->log('cleared', $actor, ['to' => $report->status]);
+            $report->status = $acted ? Report::RESOLVED : Report::REJECTED;
+            $report->closed_at = $now;
+            $report->closed_by_id = $actor?->id;
+            $report->updated_at = $now;
+            $report->save();
+
+            $report->log('cleared', $actor, ['to' => $report->status]);
+        }
     }
 
     /**
