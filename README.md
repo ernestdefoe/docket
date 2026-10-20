@@ -6,6 +6,8 @@ Flags tells your moderators that a post was reported. Docket turns each report i
 
 Flags keeps working exactly as before. Docket adds to it and changes nothing it does; disable Docket and your flags are where you left them.
 
+![The report centre](screenshots/report-centre.png)
+
 ## What it does
 
 - **One report per flagged post.** Every flag on the post joins it, whatever raised it: the flag form, a post waiting for approval, or an extension that flags posts. A flag after the report is closed opens a new one.
@@ -20,6 +22,10 @@ Flags keeps working exactly as before. Docket adds to it and changes nothing it 
 - **Notifications**: *a report was assigned to me* (web and email) and *a report I made was reviewed* (web, email optional).
 - Dismissing flags the Flarum way, from the post or the flags dropdown, closes the report too: resolved if something was done to the post, rejected if not.
 
+![A report: the post, who reported it, the timeline and staff notes, and who holds it](screenshots/report-in-progress.png)
+
+![Resolving a report and telling the people who reported it](screenshots/resolve-dialog.png)
+
 ## Works with
 
 - **flarum/tags**: rules by tag, and *View flags* per tag decides which reports a moderator sees.
@@ -33,6 +39,8 @@ Flags keeps working exactly as before. Docket adds to it and changes nothing it 
 A report is seen by exactly the people who see the flags on its post: the post must be visible to them (private discussions, restricted tags, hidden and unapproved posts all count), and they need *View flags* for its tags. A queue kept to groups narrows that further. A report whose post has been deleted is kept for staff who hold *View flags* forum-wide.
 
 The people who reported a post see only their own report: its status, and the outcome message when staff chose to send one. They never see staff notes, other reporters, or who handled it.
+
+![What a member sees under My reports](screenshots/my-reports.png)
 
 ## Install
 
@@ -54,6 +62,8 @@ php flarum cache:clear
 ## Settings
 
 *Admin → Docket*: queues, rules, and whether the *tell the reporters* box starts ticked. The *Assign reports to other moderators* permission is in the Moderate section of the permission grid (Moderators by default).
+
+![Queues and auto-assignment rules](screenshots/admin-queues-and-rules.png)
 
 ## Support
 
