@@ -157,8 +157,11 @@ export default class ReportPage extends Page {
     if (!this.report) return;
     this.busy = true;
 
+    const putBack = this.putBack(this.report);
+
     updateReport(this.report, { status: 'rejected' })
       .then(() => {
+        putBack();
         this.dropFlagCounts();
         return this.load();
       })
@@ -167,6 +170,20 @@ export default class ReportPage extends Page {
         this.busy = false;
         m.redraw();
       });
+  }
+
+  /**
+   * Rejecting what the crowd hid restores the post. Core leaves isHidden out
+   * of a post that isn't hidden, so a reload can't clear it: this does.
+   */
+  putBack(report: Report) {
+    const post = report.crowdActed() ? report.post() || null : null;
+
+    return () => {
+      const back = { isHidden: false, hiddenAt: null, isApproved: true };
+      post?.pushAttributes(back);
+      (post?.discussion() || null)?.pushAttributes(back);
+    };
   }
 
   /** A report's flags were dismissed with it: the flags dropdown and its count are out of date. */
@@ -398,10 +415,13 @@ export default class ReportPage extends Page {
   }
 
   close(report: Report, status: 'resolved' | 'rejected') {
+    const putBack = this.putBack(report);
+
     app.modal.show(CloseReportModal, {
       report,
       status,
       onclosed: () => {
+        if (status === 'rejected') putBack();
         this.dropFlagCounts();
         this.load();
       },
