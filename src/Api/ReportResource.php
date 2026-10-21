@@ -2,6 +2,7 @@
 
 namespace ErnestDefoe\Docket\Api;
 
+use ErnestDefoe\Docket\Crowd\Crowd;
 use ErnestDefoe\Docket\Docket;
 use ErnestDefoe\Docket\Queue;
 use ErnestDefoe\Docket\Report;
@@ -105,6 +106,14 @@ class ReportResource extends AbstractDatabaseResource
             Schema\Boolean::make('reportersNotified')
                 ->property('reporters_notified'),
             Schema\Integer::make('entryCount'),
+            // What crowd moderation did to the post: hidden, approval,
+            // restored or held.
+            Schema\Str::make('crowdState')
+                ->property('crowd_state')
+                ->nullable(),
+            Schema\DateTime::make('crowdAt')
+                ->property('crowd_at')
+                ->nullable(),
             // Where the post is: its discussion's id, slug and title. The
             // report is only seen by someone who can see the post, and so
             // its discussion.
@@ -237,6 +246,11 @@ class ReportResource extends AbstractDatabaseResource
                 $status = $changes['status'];
 
                 if (! in_array($status, Report::ACTIVE, true)) {
+                    // Rejecting what the crowd hid puts it back.
+                    if ($status === Report::REJECTED && in_array($model->crowd_state, Crowd::ACTED, true)) {
+                        resolve(Crowd::class)->restore($model, $actor);
+                    }
+
                     $this->docket()->close($model, $status, $actor, (bool) ($changes['notify'] ?? false), $changes['outcome'] ?? null);
                 } elseif (! $model->isActive()) {
                     $this->docket()->reopen($model, $status, $actor);
@@ -285,6 +299,15 @@ class ReportResource extends AbstractDatabaseResource
             // Moving between open and in progress hands the report to you or
             // to no one, which is taking it from its holder.
             $this->fail('status', 'assign_others');
+        }
+
+        if (
+            ($changes['status'] ?? null) === Report::REJECTED
+            && $report->isActive()
+            && in_array($report->crowd_state, Crowd::ACTED, true)
+            && ! resolve(Crowd::class)->mayRestore($report, $actor)
+        ) {
+            $this->fail('status', 'cannot_restore');
         }
 
         if (array_key_exists('queue', $changes) && ! $report->isActive()) {

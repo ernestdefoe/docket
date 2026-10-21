@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $type
  * @property string|null $reason
  * @property string|null $reason_detail
+ * @property string|null $ip_hash never serialized
  * @property Carbon|null $created_at
  * @property-read Report $report
  * @property-read \Flarum\Post\Post|null $post

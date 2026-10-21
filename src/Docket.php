@@ -3,6 +3,7 @@
 namespace ErnestDefoe\Docket;
 
 use Carbon\Carbon;
+use ErnestDefoe\Docket\Crowd\Crowd;
 use ErnestDefoe\Docket\Notification\ReportAssignedBlueprint;
 use ErnestDefoe\Docket\Notification\ReportOutcomeBlueprint;
 use Flarum\Extension\ExtensionManager;
@@ -37,6 +38,14 @@ class Docket
      * @var array<int, true>
      */
     protected array $closing = [];
+
+    /**
+     * Posts crowd moderation is hiding or restoring itself: it logs that in
+     * its own words, so the post events it raises are not logged again.
+     *
+     * @var array<int, true>
+     */
+    public array $quiet = [];
 
     public function __construct(
         protected NotificationSyncer $notifications,
@@ -92,11 +101,27 @@ class Docket
         $entry->reason = $flag->reason;
         $entry->reason_detail = $flag->reason_detail;
         $entry->created_at = $flag->created_at ?? $now;
+
+        if ($entry->type === 'user') {
+            $entry->ip_hash = $this->crowd()->addressHash();
+        }
+
         $entry->save();
 
         if ($report->entry_count === 1) {
             $this->route($report, $flag, $post, $notify);
         }
+
+        // Still holding the post's row: of several reports at once, one acts.
+        if ($entry->type === 'user') {
+            $this->crowd()->consider($report, $post);
+        }
+    }
+
+    /** Resolved on use: only filing a flag or closing a report needs it. */
+    protected function crowd(): Crowd
+    {
+        return resolve(Crowd::class);
     }
 
     /**
@@ -454,7 +479,13 @@ class Docket
         $now = Carbon::now();
 
         foreach (Report::query()->where('post_id', $post->id)->whereIn('status', Report::ACTIVE)->get() as $report) {
-            $acted = ! $post->exists || $report->events()->whereIn('type', self::ACTIONS)->exists();
+            // Flags dismissed while the crowd's hide stands confirm it; once
+            // staff restored the post they were wrong.
+            $acted = match (true) {
+                ! $post->exists, in_array($report->crowd_state, Crowd::ACTED, true) => true,
+                $report->crowd_state === Crowd::RESTORED => false,
+                default => $report->events()->whereIn('type', self::ACTIONS)->exists(),
+            };
 
             $report->status = $acted ? Report::RESOLVED : Report::REJECTED;
             $report->closed_at = $now;
@@ -478,6 +509,10 @@ class Docket
      */
     public function postAction(int $postId, string $type, ?User $actor, ?array $data = null): void
     {
+        if (isset($this->quiet[$postId])) {
+            return;
+        }
+
         $report = Report::query()->where('post_id', $postId)->orderByDesc('id')->first();
 
         if (! $report || (! $report->isActive() && (! $report->closed_at || $report->closed_at->lt(Carbon::now()->subMinutes(5))))) {
@@ -496,6 +531,13 @@ class Docket
 
         $report->updated_at = Carbon::now();
         $report->save();
+
+        // Staff put back by hand what the crowd hid.
+        $undoes = ['post_restored' => Crowd::HIDDEN, 'post_approved' => Crowd::APPROVAL];
+
+        if ($actor && isset($undoes[$type]) && $report->crowd_state === $undoes[$type]) {
+            $this->crowd()->restored($report, $actor);
+        }
     }
 
     /**

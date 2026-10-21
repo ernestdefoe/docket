@@ -92,6 +92,15 @@ class QueueResource extends AbstractDatabaseResource
                 ->property('is_restricted')
                 ->visible(fn (Queue $queue, FlarumContext $context) => $context->getActor()->isAdmin()),
 
+            // Crowd moderation's threshold here: null for the forum's, 0 for never.
+            Schema\Integer::make('crowdThreshold')
+                ->property('crowd_threshold')
+                ->nullable()
+                ->writable(fn (Queue $queue, FlarumContext $context) => $context->getActor()->isAdmin())
+                ->visible(fn (Queue $queue, FlarumContext $context) => $context->getActor()->isAdmin())
+                ->min(0)
+                ->max(1000),
+
             Schema\Relationship\ToMany::make('groups')
                 ->writable(fn (Queue $queue, FlarumContext $context) => $context->getActor()->isAdmin())
                 ->visible(fn (Queue $queue, FlarumContext $context) => $context->getActor()->isAdmin())

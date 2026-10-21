@@ -9,6 +9,7 @@ import type Mithril from 'mithril';
 import type { Queue } from '../../common/models';
 import { save } from '../api';
 import { t } from '../t';
+import extractText from 'flarum/common/utils/extractText';
 
 export interface QueueModalAttrs extends IFormModalAttrs {
   queue?: Queue;
@@ -20,6 +21,7 @@ export default class QueueModal extends FormModal<QueueModalAttrs> {
   description!: Stream<string>;
   color!: Stream<string>;
   groups!: Stream<string[]>;
+  crowd!: Stream<string>;
 
   oninit(vnode: Mithril.Vnode<QueueModalAttrs, this>) {
     super.oninit(vnode);
@@ -28,6 +30,8 @@ export default class QueueModal extends FormModal<QueueModalAttrs> {
     this.name = Stream(queue?.name() || '');
     this.description = Stream(queue?.description() || '');
     this.color = Stream(queue?.color() || '');
+    const threshold = queue?.crowdThreshold();
+    this.crowd = Stream(threshold === null || threshold === undefined ? '' : String(threshold));
     this.groups = Stream(((queue?.groups() || []) as Group[]).filter(Boolean).map((g) => g.id()!));
   }
 
@@ -67,6 +71,19 @@ export default class QueueModal extends FormModal<QueueModalAttrs> {
             <p className="helpText">{t('queues.groups_help')}</p>
           </div>
           <div className="Form-group">
+            <label for="docket-queue-crowd">{t('queues.crowd')}</label>
+            <input
+              id="docket-queue-crowd"
+              className="FormControl"
+              type="number"
+              min={0}
+              max={1000}
+              placeholder={extractText(t('queues.crowd_default'))}
+              bidi={this.crowd}
+            />
+            <p className="helpText">{t('queues.crowd_help')}</p>
+          </div>
+          <div className="Form-group">
             <Button type="submit" className="Button Button--primary" loading={this.loading} disabled={!this.name().trim()}>
               {t('queues.save')}
             </Button>
@@ -87,7 +104,12 @@ export default class QueueModal extends FormModal<QueueModalAttrs> {
     save(
       'docket-queues',
       this.attrs.queue?.id() || null,
-      { name: this.name().trim(), description: this.description().trim() || null, color: this.color() || null },
+      {
+        name: this.name().trim(),
+        description: this.description().trim() || null,
+        color: this.color() || null,
+        crowdThreshold: this.crowd() === '' ? null : Math.max(0, Math.round(Number(this.crowd()) || 0)),
+      },
       { groups }
     )
       .then(() => {

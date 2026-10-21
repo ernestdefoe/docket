@@ -365,3 +365,34 @@
 .DocketMine-excerpt {
   font-weight: normal;
 }
+
+// Crowd moderation: what members' reports did to the post.
+.DocketCrowdChip {
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: fade(#d83e3e, 15%);
+  white-space: nowrap;
+}
+.DocketCrowd {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 15px;
+  margin-bottom: 15px;
+  border-radius: @border-radius;
+  background: fade(#d83e3e, 12%);
+
+  > .fas {
+    font-size: 18px;
+  }
+}
+.DocketCrowd-text {
+  flex: 1;
+  min-width: 200px;
+}
+.DocketCrowd--held {
+  background: var(--control-bg);
+}

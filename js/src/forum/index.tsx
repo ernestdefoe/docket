@@ -81,5 +81,6 @@ app.initializers.add('ernestdefoe-docket', () => {
     }
 
     items.add('docketOutcome', { name: 'docketOutcome', icon: 'fas fa-flag-checkered', label: t('settings.notify_outcome') });
+    items.add('docketCrowd', { name: 'docketCrowd', icon: 'fas fa-users-slash', label: t('settings.notify_crowd') });
   });
 });

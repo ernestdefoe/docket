@@ -24,6 +24,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property bool $reporters_notified
  * @property int|null $closed_by_id
  * @property Carbon|null $closed_at
+ * @property string|null $crowd_state hidden, approval, restored or held: see Crowd
+ * @property Carbon|null $crowd_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Post|null $post
@@ -57,6 +59,7 @@ class Report extends AbstractModel
         'entry_count' => 'integer',
         'reporters_notified' => 'boolean',
         'closed_at' => 'datetime',
+        'crowd_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

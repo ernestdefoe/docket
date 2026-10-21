@@ -4,6 +4,7 @@ namespace ErnestDefoe\Docket\Listener;
 
 use ErnestDefoe\Docket\Docket;
 use ErnestDefoe\Docket\Queue;
+use Flarum\Discussion\Event\Restored as DiscussionRestored;
 use Flarum\Flags\Event\Cleared;
 use Flarum\Flags\Event\Deleting as FlagDeleting;
 use Flarum\Flags\Flag;
@@ -39,6 +40,8 @@ class RecordActivity
 
         $events->listen(Hidden::class, fn (Hidden $event) => $this->docket()->postAction($event->post->id, 'post_hidden', $event->actor));
         $events->listen(Restored::class, fn (Restored $event) => $this->docket()->postAction($event->post->id, 'post_restored', $event->actor));
+        // Crowd moderation hides a whole discussion when its first post is reported.
+        $events->listen(DiscussionRestored::class, fn (DiscussionRestored $event) => $event->discussion->first_post_id && $this->docket()->postAction((int) $event->discussion->first_post_id, 'post_restored', $event->actor));
         $events->listen(Deleted::class, fn (Deleted $event) => $this->docket()->postAction($event->post->id, 'post_deleted', $event->actor));
 
         // Dismissing a post's flags while its report sits in a queue kept

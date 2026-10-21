@@ -110,6 +110,7 @@ export default class ReportPage extends Page {
 
             <div className="DocketReport-grid">
               <div className="DocketReport-main">
+                {this.crowdBanner(report)}
                 {post ? this.postCard(post) : <div className="DocketCard DocketCard--muted">{t('report.post_gone')}</div>}
                 {this.reporters(report)}
                 {this.timeline(report)}
@@ -123,6 +124,59 @@ export default class ReportPage extends Page {
         </div>
       </div>
     );
+  }
+
+  /** What the community's reports did, and the one-click way back. */
+  crowdBanner(report: Report) {
+    const state = report.crowdState();
+    if (!state || state === 'restored') return null;
+
+    if (state === 'held') {
+      return (
+        <div className="DocketCrowd DocketCrowd--held">
+          <i className="fas fa-users" aria-hidden="true" /> <span>{t('crowd.held')}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="DocketCrowd">
+        <i className="fas fa-users-slash" aria-hidden="true" />
+        <span className="DocketCrowd-text">{t(`crowd.banner_${state}`)}</span>
+        {report.isActive() ? (
+          <Button className="Button Button--primary" icon="fas fa-rotate-left" loading={this.busy} onclick={() => this.restore()}>
+            {t('crowd.restore')}
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
+  /** Reject the report, which puts the post back. */
+  restore() {
+    if (!this.report) return;
+    this.busy = true;
+
+    updateReport(this.report, { status: 'rejected' })
+      .then(() => {
+        this.dropFlagCounts();
+        return this.load();
+      })
+      .catch(() => {})
+      .finally(() => {
+        this.busy = false;
+        m.redraw();
+      });
+  }
+
+  /** A report's flags were dismissed with it: the flags dropdown and its count are out of date. */
+  dropFlagCounts() {
+    const flags = (app as any).flags;
+    if (flags) flags.cache = null;
+    const count = app.session.user?.attribute<number>('newFlagCount');
+    if (count) app.session.user!.pushAttributes({ newFlagCount: count - 1 });
+    const total = app.forum.attribute<number>('flagCount');
+    if (total) app.forum.pushAttributes({ flagCount: total - 1 });
   }
 
   postCard(post: Post) {
@@ -348,15 +402,7 @@ export default class ReportPage extends Page {
       report,
       status,
       onclosed: () => {
-        // Its flags were dismissed with it: the flags dropdown and its count
-        // are out of date.
-        const flags = (app as any).flags;
-        if (flags) flags.cache = null;
-        const count = app.session.user?.attribute<number>('newFlagCount');
-        if (count) app.session.user!.pushAttributes({ newFlagCount: count - 1 });
-        const total = app.forum.attribute<number>('flagCount');
-        if (total) app.forum.pushAttributes({ flagCount: total - 1 });
-
+        this.dropFlagCounts();
         this.load();
       },
     });

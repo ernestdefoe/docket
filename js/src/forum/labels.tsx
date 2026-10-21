@@ -71,6 +71,17 @@ export function eventText(event: ReportEvent): Mithril.Children {
     case 'post_approved':
     case 'suspended':
       return t(`timeline.${event.type()}`, { actor: who || t('timeline.someone') });
+    case 'crowd_hidden':
+    case 'crowd_approval':
+      return t(`timeline.${event.type()}${data.discussion ? '_discussion' : ''}`, {
+        people: data.people,
+        weight: data.weight,
+        threshold: data.threshold,
+      });
+    case 'crowd_held':
+      return t(`timeline.crowd_held_${data.why}`, { people: data.people });
+    case 'crowd_restored':
+      return t('timeline.crowd_restored', { actor: who || t('timeline.someone') });
     case 'warning':
       return t('timeline.warning', { actor: who || t('timeline.someone'), strikes: data.strikes ?? 0 });
     default:

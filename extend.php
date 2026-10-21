@@ -2,10 +2,12 @@
 
 use ErnestDefoe\Docket\Access;
 use ErnestDefoe\Docket\Api;
+use ErnestDefoe\Docket\Crowd\Crowd;
 use ErnestDefoe\Docket\Docket;
 use ErnestDefoe\Docket\DocketServiceProvider;
 use ErnestDefoe\Docket\Entry;
 use ErnestDefoe\Docket\Listener\RecordActivity;
+use ErnestDefoe\Docket\Notification\CrowdActionBlueprint;
 use ErnestDefoe\Docket\Notification\ReportAssignedBlueprint;
 use ErnestDefoe\Docket\Notification\ReportOutcomeBlueprint;
 use ErnestDefoe\Docket\Report;
@@ -15,6 +17,7 @@ use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\ForumResource;
 use Flarum\Api\Schema;
 use Flarum\Extend;
+use Flarum\Flags\Api\Resource\FlagResource;
 use Flarum\Flags\Flag;
 use Flarum\Forum\Content\AssertRegistered;
 use Flarum\Search\Database\DatabaseSearchDriver;
@@ -54,6 +57,26 @@ return [
                 ->get(fn () => (bool) resolve(SettingsRepositoryInterface::class)->get('ernestdefoe-docket.notify_by_default')),
         ]),
 
+    // Crowd moderation counts a connection once: the address a flag is sent
+    // from, read on that endpoint only.
+    (new Extend\ApiResource(FlagResource::class))
+        ->endpoint(Endpoint\Create::class, fn (Endpoint\Create $endpoint) => $endpoint->before(function (Context $context) {
+            Crowd::$address = Crowd::clientAddress($context->request);
+        })),
+
+    (new Extend\Settings())
+        ->default('ernestdefoe-docket.crowd_enabled', false)
+        ->default('ernestdefoe-docket.crowd_threshold', 3)
+        ->default('ernestdefoe-docket.crowd_window', 24)
+        ->default('ernestdefoe-docket.crowd_action', 'hidden')
+        ->default('ernestdefoe-docket.crowd_min_age', 7)
+        ->default('ernestdefoe-docket.crowd_min_posts', 5)
+        ->default('ernestdefoe-docket.crowd_groups', '[]')
+        ->default('ernestdefoe-docket.crowd_exempt_groups', '[]')
+        ->default('ernestdefoe-docket.crowd_trust', true)
+        ->default('ernestdefoe-docket.crowd_cooldown', 24)
+        ->default('ernestdefoe-docket.crowd_tags', '{}'),
+
     (new Extend\Routes('api'))
         ->get('/docket-counts', 'docket.counts', Api\Controller\CountsController::class)
         ->post('/docket-order', 'docket.order', Api\Controller\OrderController::class),
@@ -77,7 +100,8 @@ return [
 
     (new Extend\Notification())
         ->type(ReportAssignedBlueprint::class, ['alert', 'email'])
-        ->type(ReportOutcomeBlueprint::class, ['alert']),
+        ->type(ReportOutcomeBlueprint::class, ['alert'])
+        ->type(CrowdActionBlueprint::class, ['alert', 'email']),
 
     (new Extend\Event())
         ->subscribe(RecordActivity::class),

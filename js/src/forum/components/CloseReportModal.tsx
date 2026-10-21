@@ -50,6 +50,7 @@ export default class CloseReportModal extends FormModal<CloseReportModalAttrs> {
       <div className="Modal-body">
         <div className="Form">
           <p className="helpText">{t(`close.help_${this.attrs.status}`)}</p>
+          {this.attrs.report.crowdActed() ? <p className="helpText DocketClose-crowd">{t(`close.crowd_${this.attrs.status}`)}</p> : null}
           {reporters ? (
             <div className="Form-group">
               <Switch state={this.notify()} onchange={this.notify}>

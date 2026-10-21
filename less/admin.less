@@ -81,3 +81,42 @@
   flex-wrap: wrap;
   gap: 4px 15px;
 }
+
+.DocketCrowdSettings-group {
+  border: 0;
+  padding: 0;
+  margin: 20px 0 0;
+
+  legend {
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+  &[disabled] {
+    opacity: 0.6;
+  }
+}
+.DocketCrowdSettings-number {
+  max-width: 140px;
+}
+.DocketCrowdSettings-tags {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px 15px;
+  margin-bottom: 15px;
+}
+.DocketCrowdSettings-tag {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .FormControl {
+    width: 90px;
+  }
+}

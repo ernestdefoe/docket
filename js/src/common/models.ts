@@ -5,12 +5,16 @@ import type Group from 'flarum/common/models/Group';
 
 export type Status = 'open' | 'in_progress' | 'resolved' | 'rejected';
 
+/** What crowd moderation did to a report's post. */
+export type CrowdState = 'hidden' | 'approval' | 'restored' | 'held' | null;
+
 export class Queue extends Model {
   name = Model.attribute<string>('name');
   description = Model.attribute<string | null>('description');
   color = Model.attribute<string | null>('color');
   position = Model.attribute<number>('position');
   isRestricted = Model.attribute<boolean>('isRestricted');
+  crowdThreshold = Model.attribute<number | null>('crowdThreshold');
   groups = Model.hasMany<Group>('groups');
 }
 
@@ -47,6 +51,7 @@ export class Report extends Model {
   updatedAt = Model.attribute<Date | undefined, string>('updatedAt', Model.transformDate);
   closedAt = Model.attribute<Date | null | undefined, string | null>('closedAt', Model.transformDate);
   canAssignOthers = Model.attribute<boolean>('canAssignOthers');
+  crowdState = Model.attribute<CrowdState>('crowdState');
   post = Model.hasOne<Post | null>('post');
   user = Model.hasOne<User | null>('user');
   assignee = Model.hasOne<User | null>('assignee');
@@ -57,6 +62,12 @@ export class Report extends Model {
 
   isActive() {
     return this.status() === 'open' || this.status() === 'in_progress';
+  }
+
+  /** The crowd hid the post (or sent it to approval) and staff haven't undone it. */
+  crowdActed() {
+    const state = this.crowdState();
+    return state === 'hidden' || state === 'approval';
   }
 }
 

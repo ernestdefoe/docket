@@ -9,6 +9,7 @@ import { saveOrder } from '../api';
 import SortableList from './SortableList';
 import QueueModal from './QueueModal';
 import RuleModal, { REASONS } from './RuleModal';
+import CrowdSettings from './CrowdSettings';
 import { t } from '../t';
 import extractText from 'flarum/common/utils/extractText';
 
@@ -94,6 +95,8 @@ export default class DocketSettings extends Component {
             {t('rules.add')}
           </Button>
         </section>
+
+        <CrowdSettings tags={this.tags} />
       </div>
     );
   }
@@ -110,6 +113,9 @@ export default class DocketSettings extends Component {
             {groups.length
               ? t('queues.kept_to', { groups: groups.map((g) => g.namePlural()).join(', ') })
               : t(queue.isRestricted() ? 'queues.admins_only' : 'queues.open_to_all')}
+            {queue.crowdThreshold() != null ? (
+              <> · {t(queue.crowdThreshold() ? 'queues.crowd_summary' : 'queues.crowd_never', { count: queue.crowdThreshold() })}</>
+            ) : null}
           </div>
         </div>
         <div className="DocketSettings-actions">

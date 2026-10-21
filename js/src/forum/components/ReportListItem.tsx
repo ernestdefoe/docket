@@ -42,6 +42,11 @@ export default class ReportListItem extends Component<ReportListItemAttrs> {
         </div>
         <div className="DocketItem-side">
           {statusBadge(report.status())}
+          {report.crowdActed() ? (
+            <span className="DocketCrowdChip">
+              <i className="fas fa-users-slash" aria-hidden="true" /> {t(`crowd.chip_${report.crowdState()}`)}
+            </span>
+          ) : null}
           {queue ? (
             <span className="DocketQueueChip" style={queue.color() ? { '--docket-queue': queue.color() } : undefined}>
               {queue.name()}
