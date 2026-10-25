@@ -1,22 +1,103 @@
 // Report centre. Only Flarum's own colour properties, so every theme and dark mode
 // carry through.
 
+// Laid out with core's PageStructure, like the discussion list: core's hero, the
+// forum's sidebar, and this beside it.
 .DocketPage {
-  padding-bottom: 40px;
+  // Beside the sidebar, the content gives way rather than the lists across
+  // the top pushing it wider (they scroll instead).
+  .Page-content {
+    min-width: 0;
+  }
+
+  // On whatever colour a theme gives its hero.
+  .Hero-title .DocketStatus {
+    font-size: 13px;
+    line-height: 20px;
+    color: inherit;
+    background: color-mix(in srgb, currentColor 15%, transparent);
+  }
 }
-.DocketMinePage {
-  padding-top: 20px;
+
+// The lists across the top, tab-style; on a phone they scroll sideways.
+.DocketBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid var(--control-bg);
+
+  @media @phone {
+    flex-wrap: wrap;
+    border-bottom: 0;
+  }
 }
-.DocketPage-title {
-  margin: 0 0 15px;
-  font-size: 18px;
+.DocketBar-views {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  > ul {
+    display: flex;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .Button {
+    border-radius: 0;
+    padding: 12px 6px;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    color: var(--muted-color);
+
+    &:hover {
+      color: var(--text-color);
+    }
+
+    &[active="true"] {
+      color: var(--text-color);
+      border-bottom-color: var(--primary-color);
+      font-weight: bold;
+    }
+
+    // Inside a scroller an outline would be clipped: draw it within.
+    &:focus-visible {
+      outline-offset: -3px;
+    }
+  }
+
+  .Button-badge {
+    margin-inline-start: 6px;
+  }
+
+  @media @phone {
+    flex-basis: 100%;
+    // Edge to edge, so the scroller reads as one.
+    margin: 0 -15px;
+    padding: 0 15px;
+    border-bottom: 1px solid var(--control-bg);
+  }
 }
-.DocketPage-intro {
-  color: var(--muted-color);
-  margin: -8px 0 15px;
-}
-.DocketPage-nav .Button-badge {
-  margin-left: 6px;
+.DocketBar-queue {
+  flex-shrink: 0;
+  padding-bottom: 6px;
+  margin-inline-start: auto;
+
+  @media @phone {
+    padding: 0;
+  }
+
+  .Button-badge {
+    margin-inline-start: 6px;
+  }
 }
 .DocketQueueLink--colored .Button-icon {
   color: var(--docket-queue);
@@ -41,7 +122,7 @@
   align-items: flex-start;
   padding: 12px;
   margin-bottom: 8px;
-  border-radius: @border-radius;
+  border-radius: var(--border-radius);
   background: var(--control-bg);
   color: var(--text-color);
   text-decoration: none !important;
@@ -107,16 +188,16 @@
   vertical-align: middle;
 }
 .DocketStatus--open {
-  background: fade(@primary-color, 15%);
+  background: color-mix(in srgb, var(--primary-color) 15%, transparent);
 }
 .DocketStatus--in_progress {
-  background: fade(#e6a23c, 22%);
+  background: color-mix(in srgb, var(--control-warning-color) 22%, transparent);
 }
 .DocketStatus--resolved {
-  background: fade(#3a9b52, 20%);
+  background: color-mix(in srgb, var(--control-success-color) 20%, transparent);
 }
 .DocketStatus--rejected {
-  background: fade(#d83e3e, 15%);
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
 }
 
 .DocketQueueChip {
@@ -130,39 +211,36 @@
 }
 
 // One report
-.DocketReport-head {
-  margin: 10px 0 20px;
+.DocketReport-toolbar {
+  margin-bottom: 15px;
 }
-.DocketReport-back {
-  padding-left: 0;
-  padding-right: 0;
-}
-.DocketReport-title {
-  margin: 5px 0 3px;
-  font-size: 22px;
-}
-.DocketReport-sub {
-  color: var(--muted-color);
+.DocketReport {
+  container-type: inline-size;
 }
 .DocketReport-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0 20px;
   align-items: start;
-
-  @media @phone, @tablet {
-    grid-template-columns: minmax(0, 1fr);
+}
+// Two columns only where the page leaves room for both, whatever sits beside
+// it (the forum's sidebar, a theme's panel).
+@container (min-width: 760px) {
+  .DocketReport-grid {
+    grid-template-columns: minmax(0, 1fr) 300px;
   }
 }
-// On a phone the actions come first, they are what you came for; the
+// In one column the actions come first, they are what you came for; the
 // history stays after the post.
-@media @phone {
+@container (max-width: 759.98px) {
   .DocketReport-side {
     display: contents;
   }
   .DocketControls {
     order: -1;
   }
+}
+@media @phone {
   .DocketPost-controls .Button-label {
     display: none;
   }
@@ -171,7 +249,7 @@
 .DocketCard {
   background: var(--body-bg);
   border: 1px solid var(--control-bg);
-  border-radius: @border-radius;
+  border-radius: var(--border-radius);
   padding: 15px;
   margin-bottom: 15px;
 }
@@ -187,6 +265,7 @@
 
 .DocketPost-head {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   margin-bottom: 10px;
@@ -197,7 +276,7 @@
 }
 .DocketPost-who {
   flex: 1;
-  min-width: 0;
+  min-width: 160px;
   font-weight: bold;
 }
 .DocketPost-where {
@@ -299,7 +378,7 @@
   flex: 1;
   min-width: 0;
   background: var(--control-bg);
-  border-radius: @border-radius;
+  border-radius: var(--border-radius);
   padding: 8px 10px;
 }
 .DocketTimeline-meta,
@@ -315,7 +394,7 @@
 .DocketMine-outcome {
   margin: 6px 0 0;
   padding: 6px 10px;
-  border-left: 3px solid @primary-color;
+  border-inline-start: 3px solid var(--primary-color);
   white-space: pre-wrap;
 }
 .DocketNote {
@@ -351,7 +430,6 @@
   margin-bottom: 6px;
 }
 .DocketMine-when,
-.DocketMine-excerpt,
 .DocketMine-gone,
 .DocketMine-reason {
   color: var(--muted-color);
@@ -362,9 +440,6 @@
   margin-bottom: 4px;
   overflow-wrap: anywhere;
 }
-.DocketMine-excerpt {
-  font-weight: normal;
-}
 
 // Crowd moderation: what members' reports did to the post.
 .DocketCrowdChip {
@@ -372,7 +447,7 @@
   font-weight: bold;
   padding: 2px 8px;
   border-radius: 12px;
-  background: fade(#d83e3e, 15%);
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
   white-space: nowrap;
 }
 .DocketCrowd {
@@ -382,8 +457,8 @@
   gap: 10px;
   padding: 12px 15px;
   margin-bottom: 15px;
-  border-radius: @border-radius;
-  background: fade(#d83e3e, 12%);
+  border-radius: var(--border-radius);
+  background: color-mix(in srgb, var(--error-color) 12%, transparent);
 
   > .fas {
     font-size: 18px;
@@ -410,7 +485,7 @@
 }
 
 .DocketStatus--restored {
-  background: fade(#d83e3e, 15%);
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
 }
 
 // Their record as a reporter.
@@ -428,7 +503,7 @@
 }
 .DocketRecord-frame {
   background: var(--control-bg);
-  border-radius: @border-radius;
+  border-radius: var(--border-radius);
   padding: 12px;
   min-width: 0;
 }
@@ -459,15 +534,15 @@
 }
 .DocketRecord-bar--resolved,
 .DocketRecord-count--resolved .DocketRecord-dot {
-  background: #3a9b52;
+  background: var(--control-success-color);
 }
 .DocketRecord-bar--rejected,
 .DocketRecord-count--rejected .DocketRecord-dot {
-  background: #d83e3e;
+  background: var(--error-color);
 }
 .DocketRecord-bar--open,
 .DocketRecord-count--open .DocketRecord-dot {
-  background: @primary-color;
+  background: var(--primary-color);
 }
 .DocketRecord-counts {
   list-style: none;

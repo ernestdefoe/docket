@@ -2,12 +2,12 @@ import app from 'flarum/forum/app';
 import Page from 'flarum/common/components/Page';
 import LinkButton from 'flarum/common/components/LinkButton';
 import SelectDropdown from 'flarum/common/components/SelectDropdown';
-import Separator from 'flarum/common/components/Separator';
 import listItems from 'flarum/common/helpers/listItems';
 import ItemList from 'flarum/common/utils/ItemList';
 import type Mithril from 'mithril';
 import type { Queue, Report } from '../../common/models';
 import ReportList from './ReportList';
+import { docketNav, docketPage } from './DocketHero';
 import { t } from '../t';
 
 /** Each view: the list filter it applies. */
@@ -19,6 +19,22 @@ const VIEWS: Record<string, { icon: string; filter: Record<string, string> }> = 
   rejected: { icon: 'fas fa-circle-xmark', filter: { status: 'rejected' } },
   all: { icon: 'fas fa-list', filter: {} },
 };
+
+/**
+ * Where the lists scroll sideways (a phone), bring the open one into sight
+ * when it opens, and leave the bar alone after that.
+ */
+function showActive({ dom }: Mithril.VnodeDOM) {
+  const active = dom.querySelector<HTMLElement>('[active="true"]');
+  const href = active?.getAttribute('href') || '';
+  if (!active || (dom as HTMLElement).dataset.shown === href) return;
+  (dom as HTMLElement).dataset.shown = href;
+  if (dom.scrollWidth <= dom.clientWidth) return;
+
+  const a = active.getBoundingClientRect();
+  const d = dom.getBoundingClientRect();
+  if (a.left < d.left || a.right > d.right) dom.scrollLeft += a.left - d.left - (d.width - a.width) / 2;
+}
 
 type Counts = { open: number; in_progress: number; mine: number; queues: Record<string, number> };
 
@@ -38,7 +54,7 @@ export default class ReportCentrePage extends Page {
       return;
     }
 
-    this.bodyClass = 'App--docket';
+    docketNav(t('nav.report_centre'));
     app.setTitle(t('nav.report_centre'));
     app.setTitleCount(0);
 
@@ -72,21 +88,16 @@ export default class ReportCentrePage extends Page {
     if (queue) filter.queue = queue;
     if (post) filter.post = post;
 
-    return (
-      <div className="DocketPage">
-        <div className="container">
-          <div className="sideNavContainer">
-            <nav className="DocketPage-nav sideNav">
-              <ul>{listItems(this.sidebarItems().toArray())}</ul>
-            </nav>
-            <div className="DocketPage-results sideNavOffset">
-              <h2 className="DocketPage-title">{this.heading(view, queue)}</h2>
-              <ReportList filter={filter} />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return docketPage('DocketCentrePage', { icon: 'fas fa-clipboard-list', title: t('nav.report_centre'), subtitle: t('centre.subtitle') }, [
+      <div className="DocketBar">
+        <nav className="DocketBar-views" aria-label={t('nav.views')} oncreate={showActive} onupdate={showActive}>
+          <ul>{listItems(this.viewItems().toArray())}</ul>
+        </nav>
+        <div className="DocketBar-queue">{this.queueSelect()}</div>
+      </div>,
+      <h2 className="sr-only">{this.heading(view, queue)}</h2>,
+      <ReportList filter={filter} />,
+    ]);
   }
 
   currentView(): string {
@@ -115,20 +126,25 @@ export default class ReportCentrePage extends Page {
     return n ? <span className="Button-badge">{n}</span> : null;
   }
 
-  sidebarItems() {
+  /** The lists, across the top: needs attention, unassigned, yours, resolved, rejected, all. */
+  viewItems() {
     const items = new ItemList<Mithril.Children>();
     const view = this.currentView();
     const queue = m.route.param('queue');
     const counts = this.counts;
 
-    const nav = new ItemList<Mithril.Children>();
-
     Object.entries(VIEWS).forEach(([key, def], i) => {
       const n = counts ? { active: counts.open + counts.in_progress, unassigned: counts.open, mine: counts.mine }[key] : undefined;
 
-      nav.add(
+      items.add(
         key,
-        <LinkButton href={this.link({ view: key === 'active' ? undefined : key, queue })} icon={def.icon} active={view === key}>
+        <LinkButton
+          className="Button Button--link"
+          href={this.link({ view: key === 'active' ? undefined : key, queue })}
+          icon={def.icon}
+          active={view === key}
+          aria-current={view === key ? 'page' : undefined}
+        >
           {t(`views.${key}`)}
           {this.count(n)}
         </LinkButton>,
@@ -136,19 +152,28 @@ export default class ReportCentrePage extends Page {
       );
     });
 
-    nav.add('separator', <Separator />, 50);
+    return items;
+  }
 
-    nav.add(
+  /** Which queue: all of them, the general queue, or one of the forum's. */
+  queueItems() {
+    const items = new ItemList<Mithril.Children>();
+    const view = this.currentView();
+    const queue = m.route.param('queue');
+    const counts = this.counts;
+    const v = view === 'active' ? undefined : view;
+
+    items.add(
       'queue-all',
-      <LinkButton href={this.link({ view: view === 'active' ? undefined : view })} icon="fas fa-layer-group" active={!queue}>
+      <LinkButton href={this.link({ view: v })} icon="fas fa-layer-group" active={!queue}>
         {t('queues.all')}
       </LinkButton>,
       40
     );
 
-    nav.add(
+    items.add(
       'queue-none',
-      <LinkButton href={this.link({ view: view === 'active' ? undefined : view, queue: 'none' })} icon="fas fa-folder-open" active={queue === 'none'}>
+      <LinkButton href={this.link({ view: v, queue: 'none' })} icon="fas fa-folder-open" active={queue === 'none'}>
         {t('queues.general')}
         {this.count(counts?.queues['0'])}
       </LinkButton>,
@@ -156,10 +181,10 @@ export default class ReportCentrePage extends Page {
     );
 
     this.queues.forEach((q, i) => {
-      nav.add(
+      items.add(
         `queue-${q.id()}`,
         <LinkButton
-          href={this.link({ view: view === 'active' ? undefined : view, queue: q.id() })}
+          href={this.link({ view: v, queue: q.id() })}
           icon="fas fa-circle"
           className={'DocketQueueLink' + (q.color() ? ' DocketQueueLink--colored' : '')}
           style={q.color() ? { '--docket-queue': q.color() } : undefined}
@@ -172,13 +197,19 @@ export default class ReportCentrePage extends Page {
       );
     });
 
-    items.add(
-      'nav',
-      <SelectDropdown buttonClassName="Button" className="App-titleControl" accessibleToggleLabel={t('nav.toggle')}>
-        {nav.toArray()}
+    return items;
+  }
+
+  queueSelect() {
+    return (
+      <SelectDropdown
+        buttonClassName="Button"
+        className="DocketBar-queueSelect"
+        menuClassName="Dropdown-menu--right"
+        accessibleToggleLabel={t('nav.queue_toggle')}
+      >
+        {this.queueItems().toArray()}
       </SelectDropdown>
     );
-
-    return items;
   }
 }

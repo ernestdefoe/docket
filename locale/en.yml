@@ -30,7 +30,11 @@ ernestdefoe-docket:
       report_centre: Report centre
       my_reports: My reports
       user_reports: Reports
-      toggle: Choose a list of reports
+      views: Lists of reports
+      queue_toggle: Choose a queue
+
+    centre:
+      subtitle: Every report in one place. Claim one, work through it, and close it with a note.
 
     post:
       open_report: Report details
@@ -86,6 +90,7 @@ ernestdefoe-docket:
     report:
       title: "Report #{id}"
       opened: "Opened {time}"
+      back: Back to the report centre
       post_gone: The reported post has been deleted. Its history is kept here.
       moderate: Moderate post
       post_hidden: This post is hidden.

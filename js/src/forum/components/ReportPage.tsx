@@ -5,7 +5,6 @@ import Button from 'flarum/common/components/Button';
 import Dropdown from 'flarum/common/components/Dropdown';
 import Link from 'flarum/common/components/Link';
 import LinkButton from 'flarum/common/components/LinkButton';
-import LoadingIndicator from 'flarum/common/components/LoadingIndicator';
 import Select from 'flarum/common/components/Select';
 import UserSelectionModal from 'flarum/common/components/UserSelectionModal';
 import username from 'flarum/common/helpers/username';
@@ -22,6 +21,7 @@ import { recordLine } from '../record';
 import CloseReportModal from './CloseReportModal';
 import ReportList from './ReportList';
 import { t } from '../t';
+import { docketNav, docketPage } from './DocketHero';
 import extractText from 'flarum/common/utils/extractText';
 
 /**
@@ -48,7 +48,7 @@ export default class ReportPage extends Page {
       return;
     }
 
-    this.bodyClass = 'App--docket';
+    docketNav(t('nav.report_centre'));
     this.load();
 
     app.store
@@ -77,7 +77,7 @@ export default class ReportPage extends Page {
       .then((report) => {
         this.report = report;
         this.records = (report as any).payload?.meta?.reporterStats || {};
-        app.setTitle(t('report.title', { id: report.id() }));
+        app.setTitle(extractText(t('report.title', { id: report.id() })));
       })
       .catch(() => {})
       .finally(() => m.redraw());
@@ -86,45 +86,35 @@ export default class ReportPage extends Page {
   view() {
     const report = this.report;
 
-    if (!report) {
-      return (
-        <div className="DocketPage DocketReportPage">
-          <div className="container">
-            <LoadingIndicator />
-          </div>
-        </div>
-      );
-    }
+    if (!report) return docketPage('DocketReportPage', { icon: 'fas fa-clipboard-list', title: t('nav.report_centre') }, null, true);
 
     const post = report.post();
 
-    return (
-      <div className="DocketPage DocketReportPage">
-        <div className="container">
-          <div className="DocketReport">
-            <div className="DocketReport-head">
-              <LinkButton className="Button Button--link DocketReport-back" icon="fas fa-arrow-left" href={app.route('docket')}>
-                {t('nav.report_centre')}
-              </LinkButton>
-              <h2 className="DocketReport-title">
-                {t('report.title', { id: report.id() })} {statusBadge(report.status())}
-              </h2>
-              <div className="DocketReport-sub">{t('report.opened', { time: humanTime(report.createdAt()!) })}</div>
-            </div>
+    return docketPage(
+      'DocketReportPage',
+      {
+        icon: 'fas fa-clipboard-list',
+        title: [t('report.title', { id: report.id() }), ' ', statusBadge(report.status())],
+        subtitle: t('report.opened', { time: humanTime(report.createdAt()!) }),
+      },
+      <div className="DocketReport">
+        <div className="DocketReport-toolbar">
+          <LinkButton className="Button" icon="fas fa-arrow-left" href={app.route('docket')}>
+            {t('report.back')}
+          </LinkButton>
+        </div>
 
-            <div className="DocketReport-grid">
-              <div className="DocketReport-main">
-                {this.crowdBanner(report)}
-                {post ? this.postCard(post) : <div className="DocketCard DocketCard--muted">{t('report.post_gone')}</div>}
-                {this.reporters(report)}
-                {this.timeline(report)}
-              </div>
-              <aside className="DocketReport-side">
-                {this.controls(report)}
-                {this.history(report)}
-              </aside>
-            </div>
+        <div className="DocketReport-grid">
+          <div className="DocketReport-main">
+            {this.crowdBanner(report)}
+            {post ? this.postCard(post) : <div className="DocketCard DocketCard--muted">{t('report.post_gone')}</div>}
+            {this.reporters(report)}
+            {this.timeline(report)}
           </div>
+          <aside className="DocketReport-side">
+            {this.controls(report)}
+            {this.history(report)}
+          </aside>
         </div>
       </div>
     );
