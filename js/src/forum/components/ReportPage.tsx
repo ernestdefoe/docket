@@ -34,6 +34,8 @@ export default class ReportPage extends Page {
   /** Each reporter's record, by user id, from the report's `meta`. */
   records: Record<string, ReporterRecord> = {};
   queues: Queue[] = [];
+  /** Whose earlier reports the side shows, when several people reported the post. */
+  reporterId: string | null = null;
   note = Stream('');
   saving = false;
   busy = false;
@@ -525,6 +527,46 @@ export default class ReportPage extends Page {
           </LinkButton>
         </section>
       ) : null,
+      this.reporterHistory(report),
     ];
+  }
+
+  /** What the people who reported this post have reported before. */
+  reporterHistory(report: Report) {
+    const reporters: User[] = [];
+
+    for (const entry of report.entries() || []) {
+      const user = entry && entry.type() === 'user' ? entry.user() : null;
+      if (user && !reporters.some((r) => r.id() === user.id())) reporters.push(user);
+    }
+
+    if (!reporters.length) return null;
+
+    const reporter = reporters.find((r) => r.id() === this.reporterId) || reporters[0];
+
+    return (
+      <section className="DocketCard DocketHistory">
+        <h3 className="DocketCard-title">{t('report.reporter_history', { name: username(reporter) })}</h3>
+        {reporters.length > 1 ? (
+          <Select
+            className="DocketHistory-pick"
+            value={reporter.id()}
+            options={Object.fromEntries(reporters.map((r) => [r.id(), extractText(username(r))]))}
+            onchange={(id: string) => (this.reporterId = id)}
+            aria-label={extractText(t('report.reporter_history_pick'))}
+          />
+        ) : null}
+        <ReportList
+          filter={{ reporter: reporter.id()! }}
+          except={report.id()}
+          limit={5}
+          brief
+          empty={<p className="DocketHistory-empty">{t('report.reporter_history_empty')}</p>}
+        />
+        <LinkButton className="Button Button--link" href={app.route('user.docket.made', { username: reporter.slug() })}>
+          {t('report.user_history_all')}
+        </LinkButton>
+      </section>
+    );
   }
 }

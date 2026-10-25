@@ -159,4 +159,18 @@ class ReporterTest extends DocketTestCase
         // Staff still see the whole record.
         $this->assertCount(9, $this->json($this->reportsBy(self::REPORTER, self::MOD))['data']);
     }
+
+    #[Test]
+    public function staff_list_the_reports_a_member_raised(): void
+    {
+        $ids = fn (?int $as, string $key = 'reporter') => array_map('intval', array_column(
+            $this->json($this->get('/api/docket-reports', $as, ['filter' => [$key => (string) self::REPORTER, 'status' => 'open,in_progress,resolved,rejected'], 'page' => ['limit' => 50]]))['data'],
+            'id'
+        ));
+
+        $this->assertEqualsCanonicalizing([101, 102, 103, 104, 105, 106, 107, 108, 109], $ids(self::MOD), '110 was not raised with the form, 111 by someone else');
+        $this->assertEqualsCanonicalizing([105, 106], $ids(self::TAGMOD), 'only reports they may see');
+        $this->assertEqualsCanonicalizing([110, 111], $ids(self::MOD, '-reporter'));
+        $this->assertSame([], $this->json($this->get('/api/docket-reports', self::OTHER, ['filter' => ['reporter' => (string) self::REPORTER]]))['data'] ?? [], 'members see no reports');
+    }
 }

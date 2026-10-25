@@ -89,6 +89,7 @@ return [
         ->addFilter(Search\ReportSearcher::class, Search\AssigneeFilter::class)
         ->addFilter(Search\ReportSearcher::class, Search\UserFilter::class)
         ->addFilter(Search\ReportSearcher::class, Search\PostFilter::class)
+        ->addFilter(Search\ReportSearcher::class, Search\ReportReporterFilter::class)
         ->addSearcher(Entry::class, Search\EntrySearcher::class)
         ->addFilter(Search\EntrySearcher::class, Search\ReporterFilter::class),
 

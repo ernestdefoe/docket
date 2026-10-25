@@ -15,6 +15,7 @@ use Flarum\Search\ValidateFilterTrait;
  *   assignee  a user id, "me", or "none"
  *   user      reports about this user's posts
  *   post      reports about this post
+ *   reporter  reports this user raised with the report form
  *
  * @implements FilterInterface<DatabaseSearchState>
  */
