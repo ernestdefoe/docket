@@ -17,8 +17,9 @@ Flags keeps working exactly as before. Docket adds to it and changes nothing it 
 - **Claim, release, take over and assign.** A report someone holds is in progress; one nobody holds is open. Assigning to someone else needs the *Assign reports to other moderators* permission, and is refused if they can't see the report.
 - **Resolve or reject.** The post's flags are dismissed with it. Optionally tell the people who reported it, with a message of your own; your name is never shown to them.
 - **Staff notes and a timeline** on every report: who claimed it, who it was assigned to, the rule that filed it, and what happened to the post (hidden, restored, deleted, approved) or its author (warned, suspended).
-- **History**: earlier reports on the same post and about the same member on every report, and a *Reports* tab on each member's profile for staff.
-- **My reports** at `/my-reports` for everyone: the posts you reported and how each went, as far as staff chose to tell you.
+- **History**: earlier reports on the same post and about the same member on every report, and a *Reports* tab on each member's profile for staff, with two lists: the reports *about their posts* and the reports *made by them*.
+- **A reporter's record**, for staff: how many reports a member made in the last 30 days, 90 days, 12 months and all time, and how many of each were resolved, rejected or are still open. It heads their *Made by them* list, and one line of it sits beside each reporter's name on a report. It is counted the way crowd moderation weighs reporters, from the reports the viewing moderator can see.
+- **My reports** at `/my-reports` for everyone: the posts you reported and how each went, as far as staff chose to tell you. Admins choose how far back it goes (forever, 30 or 90 days, 6 months or a year); older reports are not sent at all, and staff still see every one.
 - **Notifications**: *a report was assigned to me* (web and email), *a report I made was reviewed* (web, email optional) and, for authors, *members' reports hid my post* (web and email).
 - Dismissing flags the Flarum way, from the post or the flags dropdown, closes the report too: resolved if something was done to the post, rejected if not.
 - **Crowd moderation** (off until you switch it on): when enough trusted members report a post within a few hours, it is hidden, or sent back to approval, until staff review it. See below.
@@ -60,6 +61,8 @@ It is built to be hard to abuse:
 
 A report is seen by exactly the people who see the flags on its post: the post must be visible to them (private discussions, restricted tags, hidden and unapproved posts all count), and they need *View flags* for its tags. A queue kept to groups narrows that further. A report whose post has been deleted is kept for staff who hold *View flags* forum-wide.
 
+A member's reports and record are for staff who can see flags; anyone else asking for them is refused, so nobody learns from them who reported whom.
+
 The people who reported a post see only their own report: its status, and the outcome message when staff chose to send one. They never see staff notes, other reporters, or who handled it.
 
 ![What a member sees under My reports](screenshots/my-reports.png)
@@ -83,7 +86,7 @@ php flarum cache:clear
 
 ## Settings
 
-*Admin → Docket*: queues (each with an optional crowd threshold), rules, crowd moderation, and whether the *tell the reporters* box starts ticked. The *Assign reports to other moderators* permission is in the Moderate section of the permission grid (Moderators by default).
+*Admin → Docket*: how far back *My reports* goes, queues (each with an optional crowd threshold), rules, crowd moderation, and whether the *tell the reporters* box starts ticked. The *Assign reports to other moderators* permission is in the Moderate section of the permission grid (Moderators by default).
 
 ![Queues and auto-assignment rules](screenshots/admin-queues-and-rules.png)
 

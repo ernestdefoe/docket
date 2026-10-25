@@ -396,3 +396,117 @@
 .DocketCrowd--held {
   background: var(--control-bg);
 }
+
+// A member's report history: about their posts, or made by them.
+.DocketTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 15px;
+
+  .Button.active {
+    .Button--color-auto('button-primary');
+  }
+}
+
+.DocketStatus--restored {
+  background: fade(#d83e3e, 15%);
+}
+
+// Their record as a reporter.
+.DocketRecord {
+  margin-bottom: 20px;
+}
+.DocketRecord-frames {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+
+  @media @phone {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.DocketRecord-frame {
+  background: var(--control-bg);
+  border-radius: @border-radius;
+  padding: 12px;
+  min-width: 0;
+}
+.DocketRecord-label {
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: var(--muted-color);
+}
+.DocketRecord-total {
+  font-size: 18px;
+  font-weight: bold;
+  margin: 2px 0 8px;
+}
+.DocketRecord-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--control-bg-shaded);
+  margin-bottom: 8px;
+  gap: 2px;
+
+  span {
+    display: block;
+    height: 100%;
+  }
+}
+.DocketRecord-bar--resolved,
+.DocketRecord-count--resolved .DocketRecord-dot {
+  background: #3a9b52;
+}
+.DocketRecord-bar--rejected,
+.DocketRecord-count--rejected .DocketRecord-dot {
+  background: #d83e3e;
+}
+.DocketRecord-bar--open,
+.DocketRecord-count--open .DocketRecord-dot {
+  background: @primary-color;
+}
+.DocketRecord-counts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+.DocketRecord-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.7;
+}
+.DocketRecord-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.DocketRecord-name {
+  flex: 1;
+  min-width: 0;
+}
+.DocketRecord-num {
+  font-weight: bold;
+  white-space: nowrap;
+}
+.DocketRecord-pct {
+  font-weight: normal;
+  color: var(--muted-color);
+}
+.DocketRecord-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted-color);
+}
+.DocketEntry-record {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted-color);
+}

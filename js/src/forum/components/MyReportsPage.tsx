@@ -10,6 +10,11 @@ import type { Entry } from '../../common/models';
 import { placeUrl, statusBadge, reasonLabel } from '../labels';
 import { t } from '../t';
 
+/** How far back the list goes, in words, for the settings admins choose from. */
+function since(days: number) {
+  return [30, 90, 180, 365].includes(days) ? t(`mine.since_${days}`) : t('mine.since_days', { count: days });
+}
+
 /**
  * The posts you reported and how each report went, as far as staff chose to
  * tell you.
@@ -18,6 +23,8 @@ export default class MyReportsPage extends Page {
   entries: Entry[] = [];
   loading = true;
   more = false;
+  /** How far back the list goes, in days, as the forum set it: 0 for forever. */
+  days = 0;
 
   oninit(vnode: Mithril.Vnode) {
     super.oninit(vnode);
@@ -38,6 +45,7 @@ export default class MyReportsPage extends Page {
       .find<Entry[]>('docket-entries', { page: { offset, limit: 20 } })
       .then((entries) => {
         this.entries.push(...entries);
+        this.days = (entries as any).payload?.meta?.reportsDays || 0;
         this.more = !!(entries as any).payload?.links?.next;
       })
       .catch(() => {})
@@ -52,8 +60,10 @@ export default class MyReportsPage extends Page {
       <div className="DocketPage DocketMinePage">
         <div className="container">
           <h2 className="DocketPage-title">{t('mine.title')}</h2>
-          <p className="DocketPage-intro">{t('mine.intro')}</p>
-          {!this.loading && !this.entries.length ? <Placeholder text={t('mine.empty')} /> : null}
+          <p className="DocketPage-intro">
+            {t('mine.intro')} {this.days ? since(this.days) : null}
+          </p>
+          {!this.loading && !this.entries.length ? <Placeholder text={t(this.days ? 'mine.empty_since' : 'mine.empty')} /> : null}
           <ul className="DocketMine">
             {this.entries.map((entry) => {
               const place = entry.place();

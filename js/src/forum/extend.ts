@@ -17,5 +17,6 @@ export default [
     .add('docket', '/reports', () => import('./components/ReportCentrePage'))
     .add('docket.report', '/reports/:id', () => import('./components/ReportPage'))
     .add('docket.mine', '/my-reports', () => import('./components/MyReportsPage'))
-    .add('user.docket', '/u/:username/reports', () => import('./components/UserReportsPage')),
+    .add('user.docket', '/u/:username/reports', () => import('./components/UserReportsPage'))
+    .add('user.docket.made', '/u/:username/reports-made', () => import('./components/UserReportsPage')),
 ];

@@ -61,6 +61,16 @@ class QueryCountTest extends DocketTestCase
     }
 
     #[Test]
+    public function a_members_reports_and_record_load_flat_for_staff(): void
+    {
+        $body = $this->json($this->get('/api/docket-entries', self::MOD, ['filter' => ['reporter' => (string) self::REPORTER]]));
+
+        $this->assertCount(7, $body['data']);
+        $this->assertSame(7, $body['meta']['reporterStats']['all']['resolved']);
+        $this->assertNotNull($body['data'][0]['attributes']['post']);
+    }
+
+    #[Test]
     public function the_moderators_notifications_load_flat(): void
     {
         $this->assertCount(7, $this->json($this->get('/api/notifications', self::MOD2))['data']);

@@ -30,7 +30,18 @@ export class Entry extends Model {
   outcome = Model.attribute<string | null>('outcome');
   user = Model.hasOne<User | null>('user');
   place = Model.attribute<Place>('post');
+  /** Staff listing a member's reports only: the report, and how it really went. */
+  reportId = Model.attribute<number | undefined>('reportId');
+  verdict = Model.attribute<Verdict | undefined>('verdict');
 }
+
+/** How a report really went: its status, or restored when staff put back what the crowd hid. */
+export type Verdict = Status | 'restored';
+
+/** A member's record over one time frame: see ReporterStats. */
+export type FrameCounts = { total: number; resolved: number; rejected: number; open: number };
+export type Frame = '30d' | '90d' | '12m' | 'all';
+export type ReporterRecord = { [frame in Frame]: FrameCounts };
 
 export class ReportEvent extends Model {
   type = Model.attribute<string>('type');

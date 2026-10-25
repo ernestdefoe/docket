@@ -2,14 +2,18 @@
 
 namespace ErnestDefoe\Docket\Api;
 
+use ErnestDefoe\Docket\Crowd\Crowd;
 use ErnestDefoe\Docket\Entry;
 use ErnestDefoe\Docket\Report;
+use ErnestDefoe\Docket\ReporterStats;
+use ErnestDefoe\Docket\Search\EntrySearcher;
 use Flarum\Api\Context as FlarumContext;
 use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\AbstractDatabaseResource;
 use Flarum\Api\Schema;
 use Flarum\Api\Sort\SortColumn;
 use Flarum\Post\Post;
+use Flarum\Settings\SettingsRepositoryInterface;
 use Flarum\User\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -21,7 +25,11 @@ use WeakMap;
  *
  * Listed, they are "My reports": only your own, with the post (when you can
  * still see it) and how the report went, worded for a reporter: whether it
- * was resolved or rejected only when staff chose to tell you.
+ * was resolved or rejected only when staff chose to tell you. How far back
+ * that list goes is EntrySearcher's.
+ *
+ * Listed with filter[reporter] (staff only), they are the reports a member
+ * made, with how each really went and the member's record in `meta`.
  *
  * @extends AbstractDatabaseResource<Entry>
  */
@@ -40,10 +48,18 @@ class EntryResource extends AbstractDatabaseResource
     public function scope(Builder $query, Context $context): void
     {
         $query->whereVisibleTo($context->getActor());
+    }
 
-        if ($context->listing(self::class)) {
-            $query->where('docket_entries.user_id', $context->getActor()->id);
-        }
+    /**
+     * The member whose reports are listed, when staff list them. The filter
+     * itself refuses anyone else (ReporterFilter).
+     */
+    protected static function reporter(Context $context): ?int
+    {
+        $filter = $context->queryParam('filter');
+        $id = is_array($filter) ? ($filter['reporter'] ?? null) : null;
+
+        return is_numeric($id) && $context->getActor()->hasPermissionLike('discussion.viewFlags') ? (int) $id : null;
     }
 
     public function endpoints(): array
@@ -53,7 +69,17 @@ class EntryResource extends AbstractDatabaseResource
                 ->authenticated()
                 ->eagerLoad(['report'])
                 ->defaultSort('-createdAt')
-                ->paginate(20, 50),
+                ->paginate(20, 50)
+                ->meta([
+                    // How far back "My reports" goes, in days (0: forever).
+                    Schema\Integer::make('reportsDays')
+                        ->visible(fn (Context $context) => self::reporter($context) === null)
+                        ->get(fn () => EntrySearcher::days(resolve(SettingsRepositoryInterface::class))),
+                    // The member's record, by time frame: see ReporterStats.
+                    Schema\Arr::make('reporterStats')
+                        ->visible(fn (Context $context) => self::reporter($context) !== null)
+                        ->get(fn (Context $context) => resolve(ReporterStats::class)->forUsers([self::reporter($context)], $context->getActor())[self::reporter($context)]),
+                ]),
         ];
     }
 
@@ -77,6 +103,15 @@ class EntryResource extends AbstractDatabaseResource
             Schema\Str::make('outcome')
                 ->nullable()
                 ->get(fn (Entry $entry) => $this->withReport($entry, fn (Report $report) => $report->reporters_notified ? $report->outcome : null)),
+
+            // For staff listing a member's reports: which report, and how it
+            // really went (restored: rejected by putting back what the crowd hid).
+            Schema\Integer::make('reportId')
+                ->property('report_id')
+                ->visible(fn (Entry $entry, Context $context) => self::reporter($context) !== null),
+            Schema\Str::make('verdict')
+                ->visible(fn (Entry $entry, Context $context) => self::reporter($context) !== null)
+                ->get(fn (Entry $entry) => $this->withReport($entry, fn (Report $report) => $report->crowd_state === Crowd::RESTORED ? Crowd::RESTORED : $report->status)),
 
             // The reported post, as a link and a discussion title, while the
             // actor can still see it; null once they can't.

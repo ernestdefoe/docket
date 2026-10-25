@@ -15,9 +15,10 @@ import PostControls from 'flarum/forum/utils/PostControls';
 import type Mithril from 'mithril';
 import type Post from 'flarum/common/models/Post';
 import type User from 'flarum/common/models/User';
-import type { Queue, Report, ReportEvent } from '../../common/models';
+import type { Queue, Report, ReportEvent, ReporterRecord } from '../../common/models';
 import { updateReport } from '../api';
 import { statusBadge, eventText, reasonLabel } from '../labels';
+import { recordLine } from '../record';
 import CloseReportModal from './CloseReportModal';
 import ReportList from './ReportList';
 import { t } from '../t';
@@ -30,6 +31,8 @@ import extractText from 'flarum/common/utils/extractText';
  */
 export default class ReportPage extends Page {
   report: Report | null = null;
+  /** Each reporter's record, by user id, from the report's `meta`. */
+  records: Record<string, ReporterRecord> = {};
   queues: Queue[] = [];
   note = Stream('');
   saving = false;
@@ -73,6 +76,7 @@ export default class ReportPage extends Page {
       .find<Report>('docket-reports', m.route.param('id'))
       .then((report) => {
         this.report = report;
+        this.records = (report as any).payload?.meta?.reporterStats || {};
         app.setTitle(t('report.title', { id: report.id() }));
       })
       .catch(() => {})
@@ -269,6 +273,7 @@ export default class ReportPage extends Page {
         <ul className="DocketEntries">
           {entries.map((entry) => {
             const user = entry!.user();
+            const record = user && entry!.type() === 'user' ? this.records[user.id()!] : null;
 
             return (
               <li className="DocketEntry">
@@ -278,6 +283,11 @@ export default class ReportPage extends Page {
                     <strong>{user ? username(user) : t('report.system')}</strong> · {reasonLabel(entry!)} · {humanTime(entry!.createdAt()!)}
                   </div>
                   {entry!.reasonDetail() ? <div className="DocketEntry-detail">{entry!.reasonDetail()}</div> : null}
+                  {record && user ? (
+                    <Link className="DocketEntry-record" href={app.route('user.docket.made', { username: user.slug() })}>
+                      {recordLine(record.all)}
+                    </Link>
+                  ) : null}
                 </div>
               </li>
             );

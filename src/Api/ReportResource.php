@@ -6,6 +6,7 @@ use ErnestDefoe\Docket\Crowd\Crowd;
 use ErnestDefoe\Docket\Docket;
 use ErnestDefoe\Docket\Queue;
 use ErnestDefoe\Docket\Report;
+use ErnestDefoe\Docket\ReporterStats;
 use Flarum\Api\Context as FlarumContext;
 use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\AbstractDatabaseResource;
@@ -77,7 +78,15 @@ class ReportResource extends AbstractDatabaseResource
                 ->paginate(20, 50),
             Endpoint\Show::make()
                 ->authenticated()
-                ->defaultInclude(['post', 'post.user', 'post.discussion', 'user', 'assignee', 'queue', 'closedBy', 'entries', 'entries.user', 'events', 'events.user']),
+                ->defaultInclude(['post', 'post.user', 'post.discussion', 'user', 'assignee', 'queue', 'closedBy', 'entries', 'entries.user', 'events', 'events.user'])
+                ->meta([
+                    // Each reporter's record, by time frame, keyed by user id.
+                    Schema\Arr::make('reporterStats')
+                        ->get(fn (Report $report, Context $context) => (object) resolve(ReporterStats::class)->forUsers(
+                            $report->entries->where('type', 'user')->pluck('user_id')->filter()->all(),
+                            $context->getActor()
+                        )),
+                ]),
             Endpoint\Update::make()
                 ->authenticated()
                 ->defaultInclude(['assignee', 'queue', 'closedBy', 'events', 'events.user']),

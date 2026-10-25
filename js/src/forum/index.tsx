@@ -42,9 +42,12 @@ app.initializers.add('ernestdefoe-docket', () => {
   extend(UserPage.prototype, 'navItems', function (this: UserPage, items) {
     if (!isStaff() || !this.user) return;
 
+    const href = app.route('user.docket', { username: this.user.slug() });
+
     items.add(
       'docket',
-      <LinkButton href={app.route('user.docket', { username: this.user.slug() })} icon="fas fa-clipboard-list">
+      // Active on both tabs: about their posts, and made by them.
+      <LinkButton href={href} active={m.route.get().split('?')[0].startsWith(href)} icon="fas fa-clipboard-list">
         {t('nav.user_reports')}
       </LinkButton>,
       5

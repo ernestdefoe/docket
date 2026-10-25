@@ -1,7 +1,7 @@
 import app from 'flarum/forum/app';
 import username from 'flarum/common/helpers/username';
 import type Mithril from 'mithril';
-import type { Entry, Place, ReportEvent, Status } from '../common/models';
+import type { Entry, Place, ReportEvent, Status, Verdict } from '../common/models';
 import { t } from './t';
 
 export const STATUS_ICONS: Record<string, string> = {
@@ -10,10 +10,11 @@ export const STATUS_ICONS: Record<string, string> = {
   resolved: 'fas fa-circle-check',
   rejected: 'fas fa-circle-xmark',
   closed: 'fas fa-circle-minus',
+  restored: 'fas fa-rotate-left',
 };
 
 /** A report's status as a pill. A helper, not a component: Mithril has no function components. */
-export function statusBadge(status: Status | 'closed') {
+export function statusBadge(status: Verdict | 'closed') {
   return (
     <span className={`DocketStatus DocketStatus--${status}`}>
       <i className={STATUS_ICONS[status]} aria-hidden="true" /> {t(`status.${status}`)}

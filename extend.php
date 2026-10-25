@@ -75,7 +75,8 @@ return [
         ->default('ernestdefoe-docket.crowd_exempt_groups', '[]')
         ->default('ernestdefoe-docket.crowd_trust', true)
         ->default('ernestdefoe-docket.crowd_cooldown', 24)
-        ->default('ernestdefoe-docket.crowd_tags', '{}'),
+        ->default('ernestdefoe-docket.crowd_tags', '{}')
+        ->default(Search\EntrySearcher::DAYS_SETTING, 0),
 
     (new Extend\Routes('api'))
         ->get('/docket-counts', 'docket.counts', Api\Controller\CountsController::class)
@@ -87,7 +88,9 @@ return [
         ->addFilter(Search\ReportSearcher::class, Search\QueueFilter::class)
         ->addFilter(Search\ReportSearcher::class, Search\AssigneeFilter::class)
         ->addFilter(Search\ReportSearcher::class, Search\UserFilter::class)
-        ->addFilter(Search\ReportSearcher::class, Search\PostFilter::class),
+        ->addFilter(Search\ReportSearcher::class, Search\PostFilter::class)
+        ->addSearcher(Entry::class, Search\EntrySearcher::class)
+        ->addFilter(Search\EntrySearcher::class, Search\ReporterFilter::class),
 
     (new Extend\ModelVisibility(Report::class))
         ->scope(Access\ScopeReportVisibility::class),
