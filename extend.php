@@ -61,7 +61,7 @@ return [
     // from, read on that endpoint only.
     (new Extend\ApiResource(FlagResource::class))
         ->endpoint(Endpoint\Create::class, fn (Endpoint\Create $endpoint) => $endpoint->before(function (Context $context) {
-            Crowd::$address = Crowd::clientAddress($context->request);
+            resolve(Crowd::class)->address = Crowd::clientAddress($context->request);
         })),
 
     (new Extend\Settings())

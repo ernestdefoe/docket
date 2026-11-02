@@ -131,6 +131,10 @@ class Docket
      */
     public function backfill(): void
     {
+        // Every Laravel store (file, array, database, redis, memcached)
+        // is a LockProvider; the fallback is for a custom one. The query is
+        // one anti-join over flags, which hold only open reports (closing a
+        // report deletes its flags), against an indexed flag_id.
         $store = resolve('cache.store')->getStore();
 
         if ($store instanceof LockProvider) {
@@ -325,15 +329,27 @@ class Docket
             ->orderBy('docket_load')
             ->orderBy('users.id')
             ->limit(25)
+            ->with('groups')
             ->get();
 
-        foreach ($candidates as $user) {
-            if ($this->canSee($user, $report)) {
-                return $user;
-            }
+        if ($candidates->isEmpty()) {
+            return null;
         }
 
-        return null;
+        // Who of them can see it, in one query: each member's own visibility
+        // scope, unioned, rather than one query per member.
+        $visible = $candidates
+            ->map(fn (User $user) => Report::query()
+                ->whereVisibleTo($user)
+                ->whereKey($report->id)
+                ->selectRaw((int) $user->id.' as docket_pick')
+                ->toBase())
+            ->reduce(fn ($union, $query) => $union ? $union->unionAll($query) : $query)
+            ->pluck('docket_pick')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        return $candidates->first(fn (User $user) => in_array((int) $user->id, $visible, true));
     }
 
     /**

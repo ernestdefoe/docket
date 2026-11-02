@@ -130,6 +130,26 @@ class RuleTest extends DocketTestCase
     }
 
     #[Test]
+    public function a_large_group_is_checked_in_one_query_not_one_per_member(): void
+    {
+        // Seven more Tag mods, all less busy than nobody: none sees flags in
+        // General, so post 1 goes to no one; TAGMOD (4) sees Games, post 2.
+        $password = $this->normalUser()['password'];
+        foreach (range(20, 26) as $id) {
+            $this->database()->table('users')->insert(['id' => $id, 'username' => "tm$id", 'email' => "tm$id@machine.local", 'password' => $password, 'is_email_confirmed' => 1]);
+            $this->database()->table('group_user')->insert(['user_id' => $id, 'group_id' => self::TAGMOD_GROUP]);
+        }
+
+        $this->rule([], null, null, self::TAGMOD_GROUP);
+
+        $this->assertSame(201, $this->flag(1, self::REPORTER)->getStatusCode());
+        $this->assertNull($this->report(1)->assignee_id);
+
+        $this->assertSame(201, $this->flag(2, self::REPORTER)->getStatusCode());
+        $this->assertSame(self::TAGMOD, (int) $this->report(2)->assignee_id);
+    }
+
+    #[Test]
     public function only_admins_see_or_change_rules_and_conditions_are_cleaned(): void
     {
         $this->assertSame(403, $this->post('/api/docket-rules', self::MOD, ['data' => ['type' => 'docket-rules', 'attributes' => ['name' => 'Mine']]])->getStatusCode());

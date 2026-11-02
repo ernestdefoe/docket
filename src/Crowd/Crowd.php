@@ -46,8 +46,12 @@ class Crowd
 
     protected const SETTING = 'ernestdefoe-docket.crowd_';
 
-    /** The address of the request that is filing a flag, set by the flag endpoint. */
-    public static ?string $address = null;
+    /**
+     * The address of the request that is filing a flag, set by the flag
+     * endpoint. On the instance (a singleton per app), not static, so it
+     * never carries over to another request in a long-running process.
+     */
+    public ?string $address = null;
 
     public function __construct(
         protected SettingsRepositoryInterface $settings,
@@ -106,7 +110,7 @@ class Crowd
      */
     public function addressHash(): ?string
     {
-        $ip = self::$address;
+        $ip = $this->address;
 
         if (! $ip || ! filter_var($ip, FILTER_VALIDATE_IP)) {
             return null;

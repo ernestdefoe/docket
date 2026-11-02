@@ -211,6 +211,8 @@ export default class CrowdSettings extends Component<CrowdSettingsAttrs> {
         this.dirty = false;
         app.alerts.show({ type: 'success' }, t('crowd.saved'));
       })
+      // app.request has already shown the error alert; this only stops the
+      // rethrown rejection going unhandled. The form stays dirty.
       .catch(() => {})
       .finally(() => {
         this.saving = false;

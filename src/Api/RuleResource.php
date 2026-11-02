@@ -64,6 +64,7 @@ class RuleResource extends AbstractDatabaseResource
                 ->minLength(1)
                 ->maxLength(100),
             Schema\Integer::make('position'),
+            // Stored as is_enabled: AbstractDatabaseResource::property() snake-cases it.
             Schema\Boolean::make('isEnabled')
                 ->writable(),
             Schema\Arr::make('conditions')
