@@ -12,11 +12,12 @@ use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\AbstractDatabaseResource;
 use Flarum\Api\Schema;
 use Flarum\Api\Sort\SortColumn;
-use Flarum\Discussion\Discussion;
 use Flarum\Foundation\ValidationException;
 use Flarum\Locale\TranslatorInterface;
-use Flarum\Post\Post;
 use Flarum\User\User;
+use Illuminate\Contracts\Cache\Lock;
+use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Tobyz\JsonApiServer\Context;
@@ -32,6 +33,9 @@ use WeakMap;
  */
 class ReportResource extends AbstractDatabaseResource
 {
+    /** The most entries, and the most timeline events, one report shows. */
+    public const SHOWN = 200;
+
     /** @var WeakMap<Report, array<string, mixed>>|null */
     protected ?WeakMap $changes = null;
 
@@ -40,7 +44,8 @@ class ReportResource extends AbstractDatabaseResource
         protected Docket $docket,
         protected Crowd $crowd,
         protected ReporterStats $stats,
-        protected PostPlace $places
+        protected PostPlace $places,
+        protected Cache $cache
     ) {
         $this->posts = new Deferred();
     }
@@ -78,6 +83,10 @@ class ReportResource extends AbstractDatabaseResource
             Endpoint\Show::make()
                 ->authenticated()
                 ->defaultInclude(['post', 'post.user', 'post.discussion', 'user', 'assignee', 'queue', 'closedBy', 'entries', 'entries.user', 'events', 'events.user'])
+                // The newest of each, however busy the report: entryCount
+                // still counts them all.
+                ->eagerLoadWhere('entries', fn ($query) => $query->orderByDesc('id')->limit(self::SHOWN))
+                ->eagerLoadWhere('events', fn ($query) => $query->orderByDesc('id')->limit(self::SHOWN))
                 ->meta([
                     // Each reporter's record, by time frame, keyed by user id.
                     Schema\Arr::make('reporterStats')
@@ -224,38 +233,74 @@ class ReportResource extends AbstractDatabaseResource
 
         /** @var User $actor */
         $actor = $context->getActor();
-        $this->check($model, $changes, $actor);
+        $lock = $this->lockFor($model);
 
-        $model->getConnection()->transaction(function () use ($model, $changes, $actor) {
-            if (array_key_exists('queue', $changes)) {
-                $this->docket->move($model, $changes['queue'], $actor);
-            }
-
-            if (array_key_exists('assignee', $changes)) {
-                $this->docket->assign($model, $changes['assignee'], $actor);
-            }
-
-            if (isset($changes['status']) && $changes['status'] !== $model->status) {
-                $status = $changes['status'];
-
-                if (! in_array($status, Report::ACTIVE, true)) {
-                    // Rejecting what the crowd hid puts it back.
-                    if ($status === Report::REJECTED && in_array($model->crowd_state, Crowd::ACTED, true)) {
-                        $this->crowd->restore($model, $actor);
-                    }
-
-                    $this->docket->close($model, $status, $actor, (bool) ($changes['notify'] ?? false), $changes['outcome'] ?? null);
-                } elseif (! $model->isActive()) {
-                    $this->docket->reopen($model, $status, $actor);
-                } elseif ($status === Report::OPEN) {
-                    $this->docket->assign($model, null, $actor);
-                } else {
-                    $this->docket->assign($model, $actor, $actor);
-                }
-            }
-        });
+        try {
+            // Checked against the report as it is now, not as this request
+            // first read it: another moderator may have just claimed or
+            // closed it.
+            $model->refresh();
+            $this->check($model, $changes, $actor);
+            $model->getConnection()->transaction(fn () => $this->apply($model, $changes, $actor));
+        } finally {
+            $lock?->release();
+        }
 
         return $model->refresh();
+    }
+
+    /**
+     * One change to a report at a time. Taken without waiting: when someone
+     * else is changing it this moment, they are told to try again.
+     */
+    protected function lockFor(Report $report): ?Lock
+    {
+        $store = $this->cache->getStore();
+
+        if (! $store instanceof LockProvider) {
+            return null;
+        }
+
+        $lock = $store->lock("ernestdefoe-docket.report.$report->id", 30);
+
+        if (! $lock->get()) {
+            $this->fail('status', 'busy');
+        }
+
+        return $lock;
+    }
+
+    /**
+     * @param array<string, mixed> $changes
+     */
+    protected function apply(Report $model, array $changes, User $actor): void
+    {
+        if (array_key_exists('queue', $changes)) {
+            $this->docket->move($model, $changes['queue'], $actor);
+        }
+
+        if (array_key_exists('assignee', $changes)) {
+            $this->docket->assign($model, $changes['assignee'], $actor);
+        }
+
+        if (isset($changes['status']) && $changes['status'] !== $model->status) {
+            $status = $changes['status'];
+
+            if (! in_array($status, Report::ACTIVE, true)) {
+                // Rejecting what the crowd hid puts it back.
+                if ($status === Report::REJECTED && in_array($model->crowd_state, Crowd::ACTED, true)) {
+                    $this->crowd->restore($model, $actor);
+                }
+
+                $this->docket->close($model, $status, $actor, (bool) ($changes['notify'] ?? false), $changes['outcome'] ?? null);
+            } elseif (! $model->isActive()) {
+                $this->docket->reopen($model, $status, $actor);
+            } elseif ($status === Report::OPEN) {
+                $this->docket->assign($model, null, $actor);
+            } else {
+                $this->docket->assign($model, $actor, $actor);
+            }
+        }
     }
 
     /**

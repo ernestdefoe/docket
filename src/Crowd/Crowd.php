@@ -3,10 +3,10 @@
 namespace ErnestDefoe\Docket\Crowd;
 
 use Carbon\Carbon;
-use ErnestDefoe\Docket\Integrations;
+use ErnestDefoe\Docket\Integration\Approval;
+use ErnestDefoe\Docket\Integration\Tags;
 use ErnestDefoe\Docket\Notification\CrowdActionBlueprint;
 use ErnestDefoe\Docket\Report;
-use Flarum\Approval\Event\PostWasApproved;
 use Flarum\Discussion\Discussion;
 use Flarum\Notification\NotificationSyncer;
 use Flarum\Post\CommentPost;
@@ -49,7 +49,8 @@ class Crowd
 
     public function __construct(
         protected SettingsRepositoryInterface $settings,
-        protected Integrations $integrations,
+        protected Approval $approval,
+        protected Tags $tags,
         protected Dispatcher $events,
         protected NotificationSyncer $notifications,
         protected Reporters $reporters
@@ -108,7 +109,7 @@ class Crowd
 
         // With flarum/approval disabled since, nobody holds its permission:
         // putting the post back is then for whoever may hide it.
-        return $report->crowd_state === self::APPROVAL && $this->integrations->approval
+        return $report->crowd_state === self::APPROVAL && $this->approval->enabled()
             ? $actor->can('approve', $post)
             : $actor->can('hide', $target);
     }
@@ -205,7 +206,7 @@ class Crowd
 
     protected function act(Report $report, Post $post, array $data): void
     {
-        $mode = $this->setting('action') === self::APPROVAL && $this->integrations->approval ? self::APPROVAL : self::HIDDEN;
+        $mode = $this->setting('action') === self::APPROVAL && $this->approval->enabled() ? self::APPROVAL : self::HIDDEN;
         $target = $this->target($post);
         $this->quietly($post, function () use ($mode, $post, $target) {
             if ($mode === self::APPROVAL) {
@@ -266,8 +267,9 @@ class Crowd
         }
 
         $post->setAttribute('is_approved', true);
+        $event = $this->approval->approvedEvent($post, $actor);
 
-        if (! $this->integrations->approval) {
+        if (! $event) {
             // Its privacy check went with it, so nothing else clears this;
             // another extension's check still runs as the models are saved.
             $post->is_private = false;
@@ -282,7 +284,7 @@ class Crowd
             return;
         }
 
-        $post->raise(new PostWasApproved($post, $actor));
+        $post->raise($event);
         $post->save();
         $this->dispatch($post);
     }
@@ -399,7 +401,7 @@ class Crowd
         $byTag = $this->tagThresholds();
 
         if ($byTag) {
-            $set = array_intersect_key($byTag, array_flip($this->integrations->tagIds($post->discussion_id)));
+            $set = array_intersect_key($byTag, array_flip($this->tags->tagIds($post->discussion_id)));
 
             if ($set) {
                 return in_array(0, $set, true) ? 0 : $this->atLeastTwo(max($set));

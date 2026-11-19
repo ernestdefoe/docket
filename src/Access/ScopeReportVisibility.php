@@ -2,7 +2,7 @@
 
 namespace ErnestDefoe\Docket\Access;
 
-use ErnestDefoe\Docket\Integrations;
+use ErnestDefoe\Docket\Integration\Tags;
 use ErnestDefoe\Docket\QueueAccess;
 use Flarum\User\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
 class ScopeReportVisibility
 {
     public function __construct(
-        protected Integrations $integrations,
+        protected Tags $tags,
         protected QueueAccess $access
     ) {
     }
@@ -33,7 +33,7 @@ class ScopeReportVisibility
         }
 
         $global = $actor->hasPermission('discussion.viewFlags');
-        $tags = $this->integrations->tags;
+        $tags = $this->tags->enabled();
 
         $query->where(function (Builder $query) use ($actor, $global, $tags) {
             $query->where(function (Builder $query) use ($actor, $global, $tags) {

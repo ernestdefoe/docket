@@ -87,6 +87,10 @@ class Address
                 : substr($packed, 0, 8);
         }
 
-        return hash_hmac('sha256', $packed, (string) $this->settings->get('ernestdefoe-docket.crowd_salt'));
+        $salt = (string) $this->settings->get('ernestdefoe-docket.crowd_salt');
+
+        // Without the key (its migration never ran), no hash: such a flag
+        // never counts, rather than being hashed so it could be matched.
+        return $salt === '' ? null : hash_hmac('sha256', $packed, $salt);
     }
 }

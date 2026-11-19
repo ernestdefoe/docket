@@ -5,6 +5,7 @@ namespace ErnestDefoe\Docket;
 use Carbon\Carbon;
 use ErnestDefoe\Docket\Crowd\Address;
 use ErnestDefoe\Docket\Crowd\Crowd;
+use ErnestDefoe\Docket\Integration\Tags;
 use ErnestDefoe\Docket\Job\FileFlag;
 use ErnestDefoe\Docket\Notification\ReportAssignedBlueprint;
 use ErnestDefoe\Docket\Notification\ReportOutcomeBlueprint;
@@ -46,7 +47,7 @@ class Docket
 
     public function __construct(
         protected NotificationSyncer $notifications,
-        protected Integrations $integrations,
+        protected Tags $tags,
         protected Bus $bus,
         protected Crowd $crowd,
         protected Address $address,
@@ -174,7 +175,7 @@ class Docket
             return;
         }
 
-        $facts = new RuleFacts($flag, $post, $this->integrations);
+        $facts = new RuleFacts($flag, $post, $this->tags);
 
         foreach ($rules as $rule) {
             if (! $facts->matches($rule)) {

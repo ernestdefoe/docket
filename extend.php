@@ -7,6 +7,7 @@ use ErnestDefoe\Docket\Docket;
 use ErnestDefoe\Docket\DocketServiceProvider;
 use ErnestDefoe\Docket\Entry;
 use ErnestDefoe\Docket\Extend\BackfillOnEnable;
+use ErnestDefoe\Docket\Integration;
 use ErnestDefoe\Docket\Listener\ApprovalDisabled;
 use ErnestDefoe\Docket\Listener\RecordActivity;
 use ErnestDefoe\Docket\Notification\CrowdActionBlueprint;
@@ -133,11 +134,13 @@ return [
         // Permission checks on each post read its discussion's tags: load
         // them for the whole page, as flarum/tags does for flags.
         ->whenExtensionEnabled('flarum-tags', fn () => [
+            (new Extend\ServiceProvider())->register(Integration\TagsServiceProvider::class),
             (new Extend\ApiResource(Api\ReportResource::class))
                 ->endpoint(Endpoint\Index::class, fn (Endpoint\Index $endpoint) => $endpoint->eagerLoad(['post.discussion.tags']))
                 ->endpoint(Endpoint\Show::class, fn (Endpoint\Show $endpoint) => $endpoint->eagerLoadWhenIncluded(['post.discussion' => ['post.discussion.tags']])),
         ])
         ->whenExtensionEnabled('flarum-approval', fn () => [
+            (new Extend\ServiceProvider())->register(Integration\ApprovalServiceProvider::class),
             (new Extend\Event())
                 ->listen(\Flarum\Approval\Event\PostWasApproved::class, fn ($event) => resolve(Docket::class)->postAction($event->post->id, 'post_approved', $event->actor)),
         ])

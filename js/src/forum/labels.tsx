@@ -1,7 +1,7 @@
 import app from 'flarum/forum/app';
 import username from 'flarum/common/helpers/username';
 import type Mithril from 'mithril';
-import type { Entry, Place, ReportEvent, Status, Verdict } from '../common/models';
+import type { Entry, Place, ReportEvent, Verdict } from '../common/models';
 import { t } from './t';
 
 export const STATUS_ICONS: Record<string, string> = {

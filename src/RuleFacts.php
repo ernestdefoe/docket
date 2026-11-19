@@ -2,6 +2,7 @@
 
 namespace ErnestDefoe\Docket;
 
+use ErnestDefoe\Docket\Integration\Tags;
 use Flarum\Flags\Flag;
 use Flarum\Group\Group;
 use Flarum\Post\Post;
@@ -21,7 +22,7 @@ class RuleFacts
     public function __construct(
         protected Flag $flag,
         protected Post $post,
-        protected Integrations $integrations
+        protected Tags $tags
     ) {
     }
 
@@ -61,7 +62,7 @@ class RuleFacts
     protected function tagIds(): array
     {
         if ($this->tagIds === null) {
-            $this->tagIds = $this->integrations->tagIds($this->post->discussion_id);
+            $this->tagIds = $this->tags->tagIds($this->post->discussion_id);
         }
 
         return $this->tagIds;

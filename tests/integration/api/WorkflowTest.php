@@ -42,6 +42,40 @@ class WorkflowTest extends DocketTestCase
     }
 
     #[Test]
+    public function a_report_someone_else_is_changing_this_moment_is_left_alone(): void
+    {
+        $this->flag(1, self::REPORTER);
+        $id = $this->reportId(1);
+
+        $held = $this->app()->getContainer()->make(\Illuminate\Contracts\Cache\Repository::class)->getStore()->lock("ernestdefoe-docket.report.$id", 30);
+        $this->assertTrue($held->get());
+
+        $response = $this->updateReport($id, self::MOD, [], $this->assignee($id, self::MOD));
+        $this->assertSame(422, $response->getStatusCode());
+        $this->assertStringContainsString('ernestdefoe-docket.api.busy', (string) $response->getBody());
+        $this->assertNull($this->row($id)->assignee_id);
+
+        $held->release();
+        $this->assertSame(200, $this->updateReport($id, self::MOD, [], $this->assignee($id, self::MOD))->getStatusCode());
+    }
+
+    #[Test]
+    public function the_newest_entries_and_events_are_shown_however_busy_the_report(): void
+    {
+        $this->flag(1, self::REPORTER);
+        $id = $this->reportId(1);
+        $now = \Carbon\Carbon::now();
+        $rows = [];
+        for ($i = 0; $i < 210; $i++) {
+            $rows[] = ['report_id' => $id, 'user_id' => self::MOD, 'type' => 'note', 'data' => json_encode(['body' => "Note $i"]), 'created_at' => $now];
+        }
+        $this->database()->table('docket_events')->insert($rows);
+
+        $events = array_filter($this->json($this->get("/api/docket-reports/$id", self::MOD))['included'], fn ($r) => $r['type'] === 'docket-events');
+        $this->assertCount(\ErnestDefoe\Docket\Api\ReportResource::SHOWN, $events);
+    }
+
+    #[Test]
     public function claiming_puts_it_in_progress_and_unclaiming_reopens_it(): void
     {
         $this->flag(1, self::REPORTER);

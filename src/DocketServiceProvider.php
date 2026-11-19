@@ -15,7 +15,10 @@ class DocketServiceProvider extends AbstractServiceProvider
         // Holds the address of the request filing a flag until its entry takes it.
         $this->container->singleton(Crowd\Address::class);
 
-        $this->container->singleton(Integrations::class);
+        // Without flarum/tags or flarum/approval: extend.php binds the real
+        // ones while those are enabled, whichever registers first.
+        $this->container->bindIf(Integration\Tags::class, Integration\NoTags::class);
+        $this->container->bindIf(Integration\Approval::class, Integration\NoApproval::class);
 
         // An alt-account extension may bind its own, before or after this.
         if (! $this->container->bound(Crowd\LinkedAccounts::class)) {

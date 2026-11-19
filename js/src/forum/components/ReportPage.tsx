@@ -14,7 +14,7 @@ import PostControls from 'flarum/forum/utils/PostControls';
 import type Mithril from 'mithril';
 import type Post from 'flarum/common/models/Post';
 import type User from 'flarum/common/models/User';
-import type { Queue, Report, ReportEvent, ReporterRecord } from '../../common/models';
+import type { Entry, Queue, Report, ReportEvent, ReporterRecord } from '../../common/models';
 import { updateReport } from '../api';
 import { statusBadge, eventText, reasonLabel } from '../labels';
 import { recordLine } from '../record';
@@ -30,6 +30,9 @@ import settle from '../../common/settle';
  * and status, the timeline with staff notes, and the history of the post
  * and its author.
  */
+/** The API sends the newest first (a busy report shows only its newest): listed in the order they happened. */
+const oldestFirst = <T extends { id(): string | undefined }>(models: T[]): T[] => [...models].sort((a, b) => Number(a.id()) - Number(b.id()));
+
 export default class ReportPage extends Page {
   report: Report | null = null;
   /** Each reporter's record, by user id, from the report's `meta`. */
@@ -247,11 +250,11 @@ export default class ReportPage extends Page {
   }
 
   reporters(report: Report) {
-    const entries = (report.entries() || []).filter(Boolean);
+    const entries = oldestFirst((report.entries() || []).filter(Boolean) as Entry[]);
 
     return (
       <section className="DocketCard">
-        <h3 className="DocketCard-title">{t('report.reporters', { count: entries.length })}</h3>
+        <h3 className="DocketCard-title">{t('report.reporters', { count: report.entryCount() || entries.length })}</h3>
         <ul className="DocketEntries">
           {entries.map((entry) => {
             const user = entry!.user();
@@ -433,7 +436,7 @@ export default class ReportPage extends Page {
   }
 
   timeline(report: Report) {
-    const events = (report.events() || []).filter(Boolean) as ReportEvent[];
+    const events = oldestFirst((report.events() || []).filter(Boolean) as ReportEvent[]);
 
     return (
       <section className="DocketCard">

@@ -4,6 +4,7 @@ ernestdefoe-docket:
     assign_others: You don't have permission to assign reports to other moderators.
     cannot_see: That member can't see this report, so it can't be assigned to them.
     cannot_restore: Rejecting this report puts the post back, and you don't have permission to restore it.
+    busy: Someone else is changing this report right now. Try again in a moment.
 
   email:
     assigned:
