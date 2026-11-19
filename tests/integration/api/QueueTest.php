@@ -137,6 +137,24 @@ class QueueTest extends DocketTestCase
     }
 
     #[Test]
+    public function a_dismissal_allowed_earlier_is_checked_again_after_the_report_moves(): void
+    {
+        $queue = $this->seniorQueue();
+        $this->flag(1, self::REPORTER);
+        $docket = $this->app()->getContainer()->make(\ErnestDefoe\Docket\Docket::class);
+        $mod = fn () => \Flarum\User\User::query()->findOrFail(self::MOD);
+
+        // In the general queue: MOD may dismiss. Docket lives on, as it does
+        // in a long-running process.
+        $docket->assertMayDismiss(1, $mod());
+
+        $this->moveTo($this->reportId(1), $queue, self::MOD2);
+
+        $this->expectException(\Flarum\User\Exception\PermissionDeniedException::class);
+        $docket->assertMayDismiss(1, $mod());
+    }
+
+    #[Test]
     public function deleting_the_only_group_a_queue_is_kept_to_keeps_it_to_admins(): void
     {
         $queue = $this->seniorQueue();

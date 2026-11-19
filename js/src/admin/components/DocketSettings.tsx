@@ -12,6 +12,7 @@ import RuleModal, { REASONS } from './RuleModal';
 import CrowdSettings from './CrowdSettings';
 import { t } from '../t';
 import extractText from 'flarum/common/utils/extractText';
+import settle from '../../common/settle';
 
 /**
  * Queues and auto-assignment rules, each in the order they are listed and
@@ -31,21 +32,21 @@ export default class DocketSettings extends Component {
   load() {
     const tags = 'flarum-tags' in flarum.extensions;
 
-    Promise.all([
-      app.store.find<Queue[]>('docket-queues', { include: 'groups' }),
-      app.store.find<Rule[]>('docket-rules'),
-      tags ? app.store.find<any[]>('tags') : Promise.resolve(null),
-    ])
-      .then(([queues, rules, tagList]) => {
+    settle(
+      Promise.all([
+        app.store.find<Queue[]>('docket-queues', { include: 'groups' }),
+        app.store.find<Rule[]>('docket-rules'),
+        tags ? app.store.find<any[]>('tags') : Promise.resolve(null),
+      ]),
+      ([queues, rules, tagList]) => {
         this.queues = [...queues];
         this.rules = [...rules];
         this.tags = tagList ? tagList.map((tag: any) => ({ id: tag.id(), name: tag.name() })) : null;
-      })
-      .catch(() => {})
-      .finally(() => {
-        this.loading = false;
-        m.redraw();
-      });
+      }
+    ).finally(() => {
+      this.loading = false;
+      m.redraw();
+    });
   }
 
   view() {
@@ -53,51 +54,65 @@ export default class DocketSettings extends Component {
 
     return (
       <div className="DocketSettings">
-        <section className="DocketSettings-section">
-          <h3>{t('queues.title')}</h3>
-          <p className="helpText">{t('queues.help')}</p>
-          {this.queues.length ? (
-            <SortableList
-              items={this.queues}
-              itemKey={(q: any) => q.id()!}
-              label={(q: Queue) => q.name()}
-              onsort={(queues: Queue[]) => this.sort('queues', queues)}
-              render={(q: Queue) => this.queueRow(q)}
-            />
-          ) : (
-            <p className="DocketSettings-empty">{t('queues.empty')}</p>
-          )}
-          <Button type="button" className="Button" icon="fas fa-plus" onclick={() => app.modal.show(QueueModal, { onsaved: () => this.load() })}>
-            {t('queues.add')}
-          </Button>
-        </section>
+        {this.queuesSection()}
 
-        <section className="DocketSettings-section">
-          <h3>{t('rules.title')}</h3>
-          <p className="helpText">{t('rules.help')}</p>
-          {this.rules.length ? (
-            <SortableList
-              items={this.rules}
-              itemKey={(r: any) => r.id()!}
-              label={(r: Rule) => r.name()}
-              onsort={(rules: Rule[]) => this.sort('rules', rules)}
-              render={(r: Rule) => this.ruleRow(r)}
-            />
-          ) : (
-            <p className="DocketSettings-empty">{t('rules.empty')}</p>
-          )}
-          <Button
-            type="button"
-            className="Button"
-            icon="fas fa-plus"
-            onclick={() => app.modal.show(RuleModal, { queues: this.queues, tags: this.tags, onsaved: () => this.load() })}
-          >
-            {t('rules.add')}
-          </Button>
-        </section>
+        {this.rulesSection()}
 
         <CrowdSettings tags={this.tags} />
       </div>
+    );
+  }
+
+  /** The queues, in the order they are listed. */
+  queuesSection() {
+    return (
+      <section className="DocketSettings-section">
+        <h3>{t('queues.title')}</h3>
+        <p className="helpText">{t('queues.help')}</p>
+        {this.queues.length ? (
+          <SortableList
+            items={this.queues}
+            itemKey={(q: any) => q.id()!}
+            label={(q: Queue) => q.name()}
+            onsort={(queues: Queue[]) => this.sort('queues', queues)}
+            render={(q: Queue) => this.queueRow(q)}
+          />
+        ) : (
+          <p className="DocketSettings-empty">{t('queues.empty')}</p>
+        )}
+        <Button type="button" className="Button" icon="fas fa-plus" onclick={() => app.modal.show(QueueModal, { onsaved: () => this.load() })}>
+          {t('queues.add')}
+        </Button>
+      </section>
+    );
+  }
+
+  /** The rules, tried in order: the first that matches files the report. */
+  rulesSection() {
+    return (
+      <section className="DocketSettings-section">
+        <h3>{t('rules.title')}</h3>
+        <p className="helpText">{t('rules.help')}</p>
+        {this.rules.length ? (
+          <SortableList
+            items={this.rules}
+            itemKey={(r: any) => r.id()!}
+            label={(r: Rule) => r.name()}
+            onsort={(rules: Rule[]) => this.sort('rules', rules)}
+            render={(r: Rule) => this.ruleRow(r)}
+          />
+        ) : (
+          <p className="DocketSettings-empty">{t('rules.empty')}</p>
+        )}
+        <Button
+          type="button"
+          className="Button"
+          icon="fas fa-plus"
+          onclick={() => app.modal.show(RuleModal, { queues: this.queues, tags: this.tags, onsaved: () => this.load() })}
+        >
+          {t('rules.add')}
+        </Button>
+      </section>
     );
   }
 
@@ -139,40 +154,8 @@ export default class DocketSettings extends Component {
   }
 
   ruleRow(rule: Rule) {
-    const c = rule.conditions() || { tags: [], reasons: [], types: [], groups: [] };
-    const when: string[] = [];
-
-    if (c.tags?.length && this.tags)
-      when.push(
-        this.tags
-          .filter((tag) => c.tags.includes(Number(tag.id)))
-          .map((tag) => tag.name)
-          .join(', ')
-      );
-    if (c.reasons?.length)
-      when.push(
-        c.reasons
-          .filter((r) => REASONS.includes(r))
-          .map((r) => extractText(t(`reasons.${r}`)))
-          .join(', ')
-      );
-    if (c.types?.length) when.push(c.types.join(', '));
-    if (c.groups?.length) {
-      when.push(
-        c.groups
-          .map((id) => app.store.getById<Group>('groups', String(id))?.namePlural())
-          .filter(Boolean)
-          .join(', ')
-      );
-    }
-
-    const then: string[] = [];
-    const queue = rule.queue() || null;
-    const assignee = rule.assignee() || null;
-    const group = rule.assigneeGroup() || null;
-    if (queue) then.push(extractText(t('rules.summary_queue', { queue: queue.name() })));
-    if (assignee) then.push(extractText(t('rules.summary_user', { name: assignee.displayName() })));
-    if (group) then.push(extractText(t('rules.summary_group', { group: group.namePlural() })));
+    const when = this.ruleWhen(rule);
+    const then = this.ruleThen(rule);
 
     return (
       <div className={'DocketSettings-row' + (rule.isEnabled() ? '' : ' is-disabled')}>
@@ -205,6 +188,51 @@ export default class DocketSettings extends Component {
     );
   }
 
+  /** A rule's conditions, in words: one entry per kind set. */
+  ruleWhen(rule: Rule): string[] {
+    const c = rule.conditions() || { tags: [], reasons: [], types: [], groups: [] };
+    const when: string[] = [];
+
+    if (c.tags?.length && this.tags)
+      when.push(
+        this.tags
+          .filter((tag) => c.tags.includes(Number(tag.id)))
+          .map((tag) => tag.name)
+          .join(', ')
+      );
+    if (c.reasons?.length)
+      when.push(
+        c.reasons
+          .filter((r) => REASONS.includes(r))
+          .map((r) => extractText(t(`reasons.${r}`)))
+          .join(', ')
+      );
+    if (c.types?.length) when.push(c.types.join(', '));
+    if (c.groups?.length) {
+      when.push(
+        c.groups
+          .map((id) => app.store.getById<Group>('groups', String(id))?.namePlural())
+          .filter(Boolean)
+          .join(', ')
+      );
+    }
+
+    return when;
+  }
+
+  /** What a rule does, in words. */
+  ruleThen(rule: Rule): string[] {
+    const then: string[] = [];
+    const queue = rule.queue() || null;
+    const assignee = rule.assignee() || null;
+    const group = rule.assigneeGroup() || null;
+    if (queue) then.push(extractText(t('rules.summary_queue', { queue: queue.name() })));
+    if (assignee) then.push(extractText(t('rules.summary_user', { name: assignee.displayName() })));
+    if (group) then.push(extractText(t('rules.summary_group', { group: group.namePlural() })));
+
+    return then;
+  }
+
   sort(type: 'queues' | 'rules', items: (Queue | Rule)[]) {
     if (type === 'queues') this.queues = items as Queue[];
     else this.rules = items as Rule[];
@@ -218,9 +246,6 @@ export default class DocketSettings extends Component {
   remove(type: string, id: string, confirmText: string) {
     if (!confirm(confirmText)) return;
 
-    app
-      .request({ method: 'DELETE', url: `${app.forum.attribute('apiUrl')}/${type}/${id}` })
-      .then(() => this.load())
-      .catch(() => {});
+    settle(app.request({ method: 'DELETE', url: `${app.forum.attribute('apiUrl')}/${type}/${id}` }), () => this.load());
   }
 }

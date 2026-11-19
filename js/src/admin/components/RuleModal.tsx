@@ -15,6 +15,7 @@ import type { Queue, Rule } from '../../common/models';
 import { save } from '../api';
 import { t } from '../t';
 import extractText from 'flarum/common/utils/extractText';
+import settle from '../../common/settle';
 
 export const REASONS = ['off_topic', 'inappropriate', 'spam', 'other'];
 
@@ -88,87 +89,9 @@ export default class RuleModal extends FormModal<RuleModalAttrs> {
             </Switch>
           </div>
 
-          <fieldset className="DocketRuleModal-when">
-            <legend>{t('rules.when')}</legend>
-            <p className="helpText">{t('rules.when_help')}</p>
-            {this.attrs.tags ? (
-              <div className="Form-group">
-                <label>{t('rules.tags')}</label>
-                <MultiSelect
-                  options={Object.fromEntries(this.attrs.tags.map((tag) => [tag.id, tag.name]))}
-                  value={this.tags()}
-                  onchange={(ids: string[]) => this.tags(ids)}
-                  aria-label={t('rules.tags')}
-                />
-              </div>
-            ) : null}
-            <div className="Form-group">
-              <label>{t('rules.reasons')}</label>
-              <div className="DocketRuleModal-checks">
-                {REASONS.map((reason) => (
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={this.reasons().includes(reason)}
-                      onchange={(e: Event) => this.toggleReason(reason, (e.target as HTMLInputElement).checked)}
-                    />
-                    {t(`reasons.${reason}`)}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="Form-group">
-              <label for="docket-rule-types">{t('rules.types')}</label>
-              <input id="docket-rule-types" className="FormControl" bidi={this.types} placeholder="user, approval" />
-              <p className="helpText">{t('rules.types_help')}</p>
-            </div>
-            <div className="Form-group">
-              <label>{t('rules.groups')}</label>
-              <GroupSelector
-                multiple
-                value={this.groups()}
-                onchange={(ids: string[]) => this.groups(ids)}
-                exclude={['2']}
-                aria-label={t('rules.groups')}
-              />
-              <p className="helpText">{t('rules.groups_help')}</p>
-            </div>
-          </fieldset>
+          {this.whenFields()}
 
-          <fieldset className="DocketRuleModal-then">
-            <legend>{t('rules.then')}</legend>
-            <div className="Form-group">
-              <label for="docket-rule-queue">{t('rules.queue')}</label>
-              <Select id="docket-rule-queue" options={queues} value={this.queue()} onchange={this.queue} />
-            </div>
-            <div className="Form-group">
-              <label for="docket-rule-mode">{t('rules.assign')}</label>
-              <Select
-                id="docket-rule-mode"
-                options={{
-                  none: extractText(t('rules.assign_none')),
-                  user: extractText(t('rules.assign_user')),
-                  group: extractText(t('rules.assign_group')),
-                }}
-                value={this.mode()}
-                onchange={this.mode}
-              />
-            </div>
-            {this.mode() === 'user' ? (
-              <div className="Form-group">
-                <Button className="Button" icon="fas fa-user" onclick={() => this.pickUser()}>
-                  {this.assignee() ? username(this.assignee()!) : t('rules.pick_user')}
-                </Button>
-                <p className="helpText">{t('rules.assign_user_help')}</p>
-              </div>
-            ) : null}
-            {this.mode() === 'group' ? (
-              <div className="Form-group">
-                <GroupSelector value={this.assigneeGroup()} onchange={this.assigneeGroup} exclude={['2', '3']} aria-label={t('rules.assign_group')} />
-                <p className="helpText">{t('rules.assign_group_help')}</p>
-              </div>
-            ) : null}
-          </fieldset>
+          {this.thenFields(queues)}
 
           <div className="Form-group">
             <Button type="submit" className="Button Button--primary" loading={this.loading} disabled={!this.name().trim()}>
@@ -177,6 +100,98 @@ export default class RuleModal extends FormModal<RuleModalAttrs> {
           </div>
         </div>
       </div>
+    );
+  }
+
+  /** When the rule applies: every condition set must match. */
+  whenFields() {
+    return (
+      <fieldset className="DocketRuleModal-when">
+        <legend>{t('rules.when')}</legend>
+        <p className="helpText">{t('rules.when_help')}</p>
+        {this.attrs.tags ? (
+          <div className="Form-group">
+            <label>{t('rules.tags')}</label>
+            <MultiSelect
+              options={Object.fromEntries(this.attrs.tags.map((tag) => [tag.id, tag.name]))}
+              value={this.tags()}
+              onchange={(ids: string[]) => this.tags(ids)}
+              aria-label={t('rules.tags')}
+            />
+          </div>
+        ) : null}
+        <div className="Form-group">
+          <label>{t('rules.reasons')}</label>
+          <div className="DocketRuleModal-checks">
+            {REASONS.map((reason) => (
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={this.reasons().includes(reason)}
+                  onchange={(e: Event) => this.toggleReason(reason, (e.target as HTMLInputElement).checked)}
+                />
+                {t(`reasons.${reason}`)}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="Form-group">
+          <label for="docket-rule-types">{t('rules.types')}</label>
+          <input id="docket-rule-types" className="FormControl" bidi={this.types} placeholder="user, approval" />
+          <p className="helpText">{t('rules.types_help')}</p>
+        </div>
+        <div className="Form-group">
+          <label>{t('rules.groups')}</label>
+          <GroupSelector
+            multiple
+            value={this.groups()}
+            onchange={(ids: string[]) => this.groups(ids)}
+            exclude={['2']}
+            aria-label={t('rules.groups')}
+          />
+          <p className="helpText">{t('rules.groups_help')}</p>
+        </div>
+      </fieldset>
+    );
+  }
+
+  /** What the rule does: the queue, and who it assigns. */
+  thenFields(queues: Record<string, string>) {
+    return (
+      <fieldset className="DocketRuleModal-then">
+        <legend>{t('rules.then')}</legend>
+        <div className="Form-group">
+          <label for="docket-rule-queue">{t('rules.queue')}</label>
+          <Select id="docket-rule-queue" options={queues} value={this.queue()} onchange={this.queue} />
+        </div>
+        <div className="Form-group">
+          <label for="docket-rule-mode">{t('rules.assign')}</label>
+          <Select
+            id="docket-rule-mode"
+            options={{
+              none: extractText(t('rules.assign_none')),
+              user: extractText(t('rules.assign_user')),
+              group: extractText(t('rules.assign_group')),
+            }}
+            value={this.mode()}
+            onchange={this.mode}
+          />
+        </div>
+        {this.mode() === 'user' ? (
+          <div className="Form-group">
+            <Button className="Button" icon="fas fa-user" onclick={() => this.pickUser()}>
+              {this.assignee() ? username(this.assignee()!) : t('rules.pick_user')}
+            </Button>
+            <p className="helpText">{t('rules.assign_user_help')}</p>
+          </div>
+        ) : null}
+        {this.mode() === 'group' ? (
+          <div className="Form-group">
+            <GroupSelector value={this.assigneeGroup()} onchange={this.assigneeGroup} exclude={['2', '3']} aria-label={t('rules.assign_group')} />
+            <p className="helpText">{t('rules.assign_group_help')}</p>
+          </div>
+        ) : null}
+      </fieldset>
     );
   }
 
@@ -214,20 +229,20 @@ export default class RuleModal extends FormModal<RuleModalAttrs> {
     const queue = this.attrs.queues.find((q) => q.id() === this.queue()) || null;
     const group = mode === 'group' && this.assigneeGroup() ? app.store.getById<Group>('groups', this.assigneeGroup()) || null : null;
 
-    save(
-      'docket-rules',
-      this.attrs.rule?.id() || null,
-      { name: this.name().trim(), isEnabled: this.enabled(), conditions },
-      { queue, assignee: mode === 'user' ? this.assignee() : null, assigneeGroup: group }
-    )
-      .then(() => {
+    settle(
+      save(
+        'docket-rules',
+        this.attrs.rule?.id() || null,
+        { name: this.name().trim(), isEnabled: this.enabled(), conditions },
+        { queue, assignee: mode === 'user' ? this.assignee() : null, assigneeGroup: group }
+      ),
+      () => {
         this.hide();
         this.attrs.onsaved();
-      })
-      .catch(() => {})
-      .finally(() => {
-        this.loading = false;
-        m.redraw();
-      });
+      }
+    ).finally(() => {
+      this.loading = false;
+      m.redraw();
+    });
   }
 }

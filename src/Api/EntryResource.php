@@ -35,6 +35,13 @@ use WeakMap;
  */
 class EntryResource extends AbstractDatabaseResource
 {
+    public function __construct(
+        protected SettingsRepositoryInterface $settings,
+        protected ReporterStats $stats,
+        protected PostPlace $postPlaces
+    ) {
+    }
+
     public function type(): string
     {
         return 'docket-entries';
@@ -74,11 +81,11 @@ class EntryResource extends AbstractDatabaseResource
                     // How far back "My reports" goes, in days (0: forever).
                     Schema\Integer::make('reportsDays')
                         ->visible(fn (Context $context) => self::reporter($context) === null)
-                        ->get(fn () => EntrySearcher::days(resolve(SettingsRepositoryInterface::class))),
+                        ->get(fn () => EntrySearcher::days($this->settings)),
                     // The member's record, by time frame: see ReporterStats.
                     Schema\Arr::make('reporterStats')
                         ->visible(fn (Context $context) => self::reporter($context) !== null)
-                        ->get(fn (Context $context) => resolve(ReporterStats::class)->forUsers([self::reporter($context)], $context->getActor())[self::reporter($context)]),
+                        ->get(fn (Context $context) => $this->stats->forUsers([self::reporter($context)], $context->getActor())[self::reporter($context)]),
                 ]),
         ];
     }
@@ -167,7 +174,7 @@ class EntryResource extends AbstractDatabaseResource
                 $this->placing = [];
             }
 
-            return ReportResource::place($known[$entry->post_id] ?? null);
+            return $this->postPlaces->of($known[$entry->post_id] ?? null);
         };
     }
 

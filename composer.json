@@ -28,6 +28,12 @@
     "flarum/core": "^2.0",
     "flarum/flags": "^2.0"
   },
+  "suggest": {
+    "flarum/tags": "Route reports by tag and limit queues to the tags a moderator can see.",
+    "flarum/approval": "Let crowd moderation send a post back to approval instead of hiding it.",
+    "flarum/suspend": "Log suspensions on a reported member's reports.",
+    "fof/moderator-warnings": "Log warnings on a reported post's or member's reports."
+  },
   "autoload": {
     "psr-4": {
       "ErnestDefoe\\Docket\\": "src/"
@@ -50,6 +56,7 @@
       "optional-dependencies": [
         "flarum/tags",
         "flarum/approval",
+        "flarum/suspend",
         "fof/moderator-warnings"
       ]
     },

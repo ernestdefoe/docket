@@ -5,6 +5,7 @@ namespace ErnestDefoe\Docket;
 use Carbon\Carbon;
 use ErnestDefoe\Docket\Crowd\Crowd;
 use Flarum\User\User;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * How a member's reports went, for staff: resolved, rejected and still open,
@@ -37,6 +38,34 @@ class ReporterStats
             return [];
         }
 
+        $empty = array_fill_keys(array_keys(self::FRAMES), ['total' => 0, 'resolved' => 0, 'rejected' => 0, 'open' => 0]);
+        $stats = array_fill_keys($userIds, $empty);
+
+        foreach ($this->query($userIds, $actor)->toBase()->get() as $row) {
+            $row = (array) $row;
+
+            foreach (array_keys(self::FRAMES) as $frame) {
+                $counts = [];
+
+                foreach (self::BUCKETS as $bucket) {
+                    $counts[$bucket] = (int) $row["{$bucket}_$frame"];
+                }
+
+                $stats[(int) $row['user_id']][$frame] = ['total' => array_sum($counts)] + $counts;
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * One row per member: each bucket in each frame, as a column.
+     *
+     * @param int[] $userIds
+     * @return Builder<Entry>
+     */
+    protected function query(array $userIds, User $actor): Builder
+    {
         $entries = (new Entry())->getTable();
         $reports = (new Report())->getTable();
         $grammar = Entry::query()->getQuery()->getGrammar();
@@ -72,23 +101,6 @@ class ReporterStats
             }
         }
 
-        $empty = array_fill_keys(array_keys(self::FRAMES), ['total' => 0, 'resolved' => 0, 'rejected' => 0, 'open' => 0]);
-        $stats = array_fill_keys($userIds, $empty);
-
-        foreach ($query->toBase()->get() as $row) {
-            $row = (array) $row;
-
-            foreach (array_keys(self::FRAMES) as $frame) {
-                $counts = [];
-
-                foreach (self::BUCKETS as $bucket) {
-                    $counts[$bucket] = (int) $row["{$bucket}_$frame"];
-                }
-
-                $stats[(int) $row['user_id']][$frame] = ['total' => array_sum($counts)] + $counts;
-            }
-        }
-
-        return $stats;
+        return $query;
     }
 }

@@ -18,7 +18,6 @@ export default [
       type: 'select',
       label: t('settings.my_reports_days'),
       help: t('settings.my_reports_days_help'),
-      default: '0',
       options: {
         0: t('settings.my_reports_forever'),
         30: t('settings.my_reports_30'),

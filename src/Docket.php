@@ -3,10 +3,11 @@
 namespace ErnestDefoe\Docket;
 
 use Carbon\Carbon;
+use ErnestDefoe\Docket\Crowd\Address;
 use ErnestDefoe\Docket\Crowd\Crowd;
+use ErnestDefoe\Docket\Job\FileFlag;
 use ErnestDefoe\Docket\Notification\ReportAssignedBlueprint;
 use ErnestDefoe\Docket\Notification\ReportOutcomeBlueprint;
-use Flarum\Extension\ExtensionManager;
 use Flarum\Flags\Command\DeleteFlags;
 use Flarum\Flags\Flag;
 use Flarum\Notification\Blueprint\BlueprintInterface;
@@ -16,6 +17,8 @@ use Flarum\User\Exception\PermissionDeniedException;
 use Flarum\User\User;
 use Illuminate\Contracts\Bus\Dispatcher as Bus;
 use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Cache\Repository as Cache;
+use WeakMap;
 
 /**
  * Everything that changes a report: filing flags into it, routing it by the
@@ -39,37 +42,57 @@ class Docket
      */
     protected array $closing = [];
 
-    /**
-     * Posts crowd moderation is hiding or restoring itself: it logs that in
-     * its own words, so the post events it raises are not logged again.
-     *
-     * @var array<int, true>
-     */
-    public array $quiet = [];
-
     public function __construct(
         protected NotificationSyncer $notifications,
-        protected ExtensionManager $extensions,
-        protected Bus $bus
+        protected Integrations $integrations,
+        protected Bus $bus,
+        protected Crowd $crowd,
+        protected Address $address,
+        protected Cache $cache,
+        protected QueueAccess $access
     ) {
+        $this->mayDismiss = new WeakMap();
     }
 
     /**
      * File a new flag: into the post's open report, or a new one, which the
      * rules then route.
      */
-    public function file(Flag $flag, bool $notify = true): void
+    public function file(Flag $flag, bool $notify = true, bool $wait = false, ?string $ipHash = null): void
     {
         if (! $flag->post_id) {
             return;
         }
 
-        // Two flags on one post at the same moment must land in one report:
-        // the post row is locked while its open report is looked up.
-        Post::query()->getConnection()->transaction(fn () => $this->fileLocked($flag, $notify));
+        // Taken now, while this is still the request that raised the flag.
+        if (! $wait && $flag->type === 'user') {
+            $ipHash = $this->address->hash();
+        }
+
+        // Two flags on one post at the same moment must land in one report.
+        // A cache lock per post holds on every database (SQLite has no row
+        // locks); the post row is locked too, for a store without locks. A
+        // request never waits for it: a flag that finds it taken is filed by
+        // a queued job, which may.
+        $store = $this->cache->getStore();
+        $file = fn () => Post::query()->getConnection()->transaction(fn () => $this->fileLocked($flag, $notify, $ipHash));
+
+        if (! $store instanceof LockProvider) {
+            $file();
+
+            return;
+        }
+
+        $lock = $store->lock("ernestdefoe-docket.file.$flag->post_id", 30);
+
+        if ($wait) {
+            $lock->block(30, $file);
+        } elseif ($lock->get($file) === false) {
+            $this->bus->dispatch(new FileFlag($flag, $notify, $ipHash));
+        }
     }
 
-    protected function fileLocked(Flag $flag, bool $notify): void
+    protected function fileLocked(Flag $flag, bool $notify, ?string $ipHash): void
     {
         $post = Post::query()->whereKey($flag->post_id)->lockForUpdate()->first();
 
@@ -103,7 +126,7 @@ class Docket
         $entry->created_at = $flag->created_at ?? $now;
 
         if ($entry->type === 'user') {
-            $entry->ip_hash = $this->crowd()->addressHash();
+            $entry->ip_hash = $ipHash;
         }
 
         $entry->save();
@@ -114,106 +137,8 @@ class Docket
 
         // Still holding the post's row: of several reports at once, one acts.
         if ($entry->type === 'user') {
-            $this->crowd()->consider($report, $post);
+            $this->crowd->consider($report, $post);
         }
-    }
-
-    /** Resolved on use: only filing a flag or closing a report needs it. */
-    protected function crowd(): Crowd
-    {
-        return resolve(Crowd::class);
-    }
-
-    /**
-     * Copy in any flag that has no entry yet: the flags already there when
-     * the extension was first enabled, and any raised while it was disabled.
-     * Run when the report centre is opened; one query when there are none.
-     */
-    public function backfill(): void
-    {
-        // Every Laravel store (file, array, database, redis, memcached)
-        // is a LockProvider; the fallback is for a custom one. The query is
-        // one anti-join over flags, which hold only open reports (closing a
-        // report deletes its flags), against an indexed flag_id.
-        $store = resolve('cache.store')->getStore();
-
-        if ($store instanceof LockProvider) {
-            $store->lock('ernestdefoe-docket.backfill', 60)->get(fn () => $this->copyMissingFlags());
-        } else {
-            $this->copyMissingFlags();
-        }
-    }
-
-    /**
-     * In batches: a few queries per 200 flags, however many posts they are
-     * on. These reports are not run through the rules; they land in the
-     * general queue.
-     */
-    protected function copyMissingFlags(): void
-    {
-        Flag::query()
-            ->whereNotIn('id', Entry::query()->whereNotNull('flag_id')->select('flag_id'))
-            ->chunkById(200, function ($flags) {
-                $now = Carbon::now();
-                $byPost = $flags->groupBy('post_id');
-                $posts = Post::query()->whereIn('id', $byPost->keys())->get(['id', 'discussion_id', 'user_id'])->keyBy('id');
-
-                $active = fn () => Report::query()
-                    ->whereIn('post_id', $posts->keys())
-                    ->whereIn('status', Report::ACTIVE)
-                    ->orderBy('id')
-                    ->get()
-                    ->keyBy('post_id');
-
-                $reports = $active();
-                $new = $posts->except($reports->keys()->all());
-
-                if ($new->isNotEmpty()) {
-                    Report::query()->insert($new->map(fn (Post $post) => [
-                        'post_id' => $post->id,
-                        'discussion_id' => $post->discussion_id,
-                        'user_id' => $post->user_id,
-                        'status' => Report::OPEN,
-                        'entry_count' => 0,
-                        'created_at' => $now,
-                        'updated_at' => $now,
-                    ])->values()->all());
-
-                    $reports = $active();
-                }
-
-                $entries = [];
-
-                foreach ($byPost as $postId => $group) {
-                    if (! $report = $reports->get($postId)) {
-                        continue;
-                    }
-
-                    foreach ($group as $flag) {
-                        $entries[] = [
-                            'report_id' => $report->id,
-                            'flag_id' => $flag->id,
-                            'post_id' => $postId,
-                            'user_id' => $flag->user_id,
-                            'type' => (string) $flag->type,
-                            'reason' => $flag->reason,
-                            'reason_detail' => $flag->reason_detail,
-                            'created_at' => $flag->created_at ?? $now,
-                        ];
-                    }
-                }
-
-                if ($entries) {
-                    Entry::query()->insert($entries);
-
-                    // Every report touched, counted again in one statement.
-                    $table = (new Report())->getTable();
-                    $entryTable = (new Entry())->getTable();
-                    Report::query()
-                        ->whereIn('id', array_unique(array_column($entries, 'report_id')))
-                        ->update(['entry_count' => Entry::query()->selectRaw('count(*)')->whereColumn("$entryTable.report_id", "$table.id")]);
-                }
-            });
     }
 
     public function activeReport(int $postId): ?Report
@@ -237,7 +162,7 @@ class Docket
             return;
         }
 
-        $facts = new RuleFacts($flag, $post, $this->extensions->isEnabled('flarum-tags'));
+        $facts = new RuleFacts($flag, $post, $this->integrations);
 
         foreach ($rules as $rule) {
             if (! $facts->matches($rule)) {
@@ -264,13 +189,17 @@ class Docket
     }
 
     /**
-     * @var array<int, true> posts already checked in this request
+     * Posts already checked, for the flags of one dismissal, which arrive one
+     * by one. Keyed by the actor's object, which is the request's own: Docket
+     * is a singleton, so in a long-lived process no answer outlives it.
+     *
+     * @var WeakMap<User, array<int, true>>
      */
-    protected array $mayDismiss = [];
+    protected WeakMap $mayDismiss;
 
     public function assertMayDismiss(int $postId, User $actor): void
     {
-        if (isset($this->closing[$postId]) || isset($this->mayDismiss[$postId]) || ! $closed = Queue::closedTo($actor)) {
+        if (isset($this->closing[$postId]) || isset($this->mayDismiss[$actor][$postId]) || ! $closed = $this->access->closedTo($actor)) {
             return;
         }
 
@@ -284,7 +213,7 @@ class Docket
             throw new PermissionDeniedException();
         }
 
-        $this->mayDismiss[$postId] = true;
+        $this->mayDismiss[$actor] = [$postId => true] + ($this->mayDismiss[$actor] ?? []);
     }
 
     /**
@@ -525,7 +454,7 @@ class Docket
      */
     public function postAction(int $postId, string $type, ?User $actor, ?array $data = null): void
     {
-        if (isset($this->quiet[$postId])) {
+        if ($this->crowd->isQuiet($postId)) {
             return;
         }
 
@@ -552,7 +481,7 @@ class Docket
         $undoes = ['post_restored' => Crowd::HIDDEN, 'post_approved' => Crowd::APPROVAL];
 
         if ($actor && isset($undoes[$type]) && $report->crowd_state === $undoes[$type]) {
-            $this->crowd()->restored($report, $actor);
+            $this->crowd->restored($report, $actor);
         }
     }
 

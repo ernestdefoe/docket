@@ -112,6 +112,18 @@ abstract class DocketTestCase extends TestCase
         return $rows;
     }
 
+    /**
+     * What enabling Docket does for the flags it has not seen: the hook
+     * queues the job, which runs at once on the tests' sync queue.
+     */
+    protected function enableDocket(): void
+    {
+        $container = $this->app()->getContainer();
+        $extension = $container->make(\Flarum\Extension\ExtensionManager::class)->getExtension('ernestdefoe-docket');
+
+        (new \ErnestDefoe\Docket\Extend\BackfillOnEnable())->onEnable($container, $extension);
+    }
+
     protected function flag(int $postId, int $as, string $reason = 'spam', ?string $detail = null): ResponseInterface
     {
         return $this->send($this->request('POST', '/api/flags', [

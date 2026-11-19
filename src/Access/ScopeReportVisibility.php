@@ -2,8 +2,8 @@
 
 namespace ErnestDefoe\Docket\Access;
 
-use ErnestDefoe\Docket\Queue;
-use Flarum\Extension\ExtensionManager;
+use ErnestDefoe\Docket\Integrations;
+use ErnestDefoe\Docket\QueueAccess;
 use Flarum\User\User;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -19,7 +19,8 @@ use Illuminate\Database\Eloquent\Builder;
 class ScopeReportVisibility
 {
     public function __construct(
-        protected ExtensionManager $extensions
+        protected Integrations $integrations,
+        protected QueueAccess $access
     ) {
     }
 
@@ -32,7 +33,7 @@ class ScopeReportVisibility
         }
 
         $global = $actor->hasPermission('discussion.viewFlags');
-        $tags = $this->extensions->isEnabled('flarum-tags');
+        $tags = $this->integrations->tags;
 
         $query->where(function (Builder $query) use ($actor, $global, $tags) {
             $query->where(function (Builder $query) use ($actor, $global, $tags) {
@@ -58,7 +59,7 @@ class ScopeReportVisibility
             }
         });
 
-        if ($closed = Queue::closedTo($actor)) {
+        if ($closed = $this->access->closedTo($actor)) {
             $query->where(fn (Builder $query) => $query->whereNull('docket_reports.queue_id')->orWhereNotIn('docket_reports.queue_id', $closed));
         }
     }

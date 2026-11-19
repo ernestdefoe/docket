@@ -9,6 +9,7 @@ import type { Queue, Report } from '../../common/models';
 import ReportList from './ReportList';
 import { docketNav, docketPage } from './DocketHero';
 import { t } from '../t';
+import settle from '../../common/settle';
 
 /** Each view: the list filter it applies. */
 const VIEWS: Record<string, { icon: string; filter: Record<string, string> }> = {
@@ -61,22 +62,16 @@ export default class ReportCentrePage extends Page {
     // From a flagged post: straight to its open report, if it has one.
     const post = m.route.param('post');
     if (post) {
-      app.store.find<Report[]>('docket-reports', { filter: { post, status: 'open,in_progress' }, page: { limit: 1 } }).then((reports) => {
+      settle(app.store.find<Report[]>('docket-reports', { filter: { post, status: 'open,in_progress' }, page: { limit: 1 } }), (reports) => {
         if (reports.length) m.route.set(app.route('docket.report', { id: reports[0].id() }), {}, { replace: true });
       });
     }
 
-    app
-      .request<Counts>({ method: 'GET', url: app.forum.attribute('apiUrl') + '/docket-counts' })
-      .then((counts) => (this.counts = counts))
-      .catch(() => {})
-      .finally(() => m.redraw());
+    settle(app.request<Counts>({ method: 'GET', url: app.forum.attribute('apiUrl') + '/docket-counts' }), (counts) => (this.counts = counts)).finally(
+      () => m.redraw()
+    );
 
-    app.store
-      .find<Queue[]>('docket-queues')
-      .then((queues) => (this.queues = queues))
-      .catch(() => {})
-      .finally(() => m.redraw());
+    settle(app.store.find<Queue[]>('docket-queues'), (queues) => (this.queues = queues)).finally(() => m.redraw());
   }
 
   view() {

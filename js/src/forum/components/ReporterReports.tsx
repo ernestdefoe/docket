@@ -10,6 +10,7 @@ import type { Entry, ReporterRecord } from '../../common/models';
 import { placeUrl, reasonLabel, statusBadge } from '../labels';
 import { recordPanel } from '../record';
 import { t } from '../t';
+import settle from '../../common/settle';
 
 export interface ReporterReportsAttrs extends ComponentAttrs {
   user: User;
@@ -33,19 +34,15 @@ export default class ReporterReports extends Component<ReporterReportsAttrs> {
   load(offset: number) {
     this.loading = true;
 
-    app.store
-      .find<Entry[]>('docket-entries', { filter: { reporter: this.attrs.user.id()! }, page: { offset, limit: 20 } })
-      .then((entries) => {
-        const payload = (entries as any).payload;
-        this.entries.push(...entries);
-        this.record = payload?.meta?.reporterStats || this.record;
-        this.more = !!payload?.links?.next;
-      })
-      .catch(() => {})
-      .finally(() => {
-        this.loading = false;
-        m.redraw();
-      });
+    settle(app.store.find<Entry[]>('docket-entries', { filter: { reporter: this.attrs.user.id()! }, page: { offset, limit: 20 } }), (entries) => {
+      const payload = (entries as any).payload;
+      this.entries.push(...entries);
+      this.record = payload?.meta?.reporterStats || this.record;
+      this.more = !!payload?.links?.next;
+    }).finally(() => {
+      this.loading = false;
+      m.redraw();
+    });
   }
 
   view() {

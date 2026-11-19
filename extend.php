@@ -2,26 +2,37 @@
 
 use ErnestDefoe\Docket\Access;
 use ErnestDefoe\Docket\Api;
-use ErnestDefoe\Docket\Crowd\Crowd;
+use ErnestDefoe\Docket\Crowd\Address;
 use ErnestDefoe\Docket\Docket;
 use ErnestDefoe\Docket\DocketServiceProvider;
 use ErnestDefoe\Docket\Entry;
+use ErnestDefoe\Docket\Extend\BackfillOnEnable;
+use ErnestDefoe\Docket\Job\HideInsteadOfApproval;
 use ErnestDefoe\Docket\Listener\RecordActivity;
 use ErnestDefoe\Docket\Notification\CrowdActionBlueprint;
 use ErnestDefoe\Docket\Notification\ReportAssignedBlueprint;
 use ErnestDefoe\Docket\Notification\ReportOutcomeBlueprint;
+use ErnestDefoe\Docket\QueueAccess;
 use ErnestDefoe\Docket\Report;
 use ErnestDefoe\Docket\Search;
 use Flarum\Api\Context;
 use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\ForumResource;
-use Flarum\Api\Schema;
+use Flarum\Discussion\Event\Restored as DiscussionRestored;
 use Flarum\Extend;
+use Flarum\Extension\Event\Disabled as ExtensionDisabled;
 use Flarum\Flags\Api\Resource\FlagResource;
+use Flarum\Flags\Event\Cleared as FlagCleared;
+use Flarum\Flags\Event\Deleting as FlagDeleting;
 use Flarum\Flags\Flag;
 use Flarum\Forum\Content\AssertRegistered;
+use Flarum\Group\Event\Deleted as GroupDeleted;
+use Flarum\Post\Event\Deleted as PostDeleted;
+use Flarum\Post\Event\Hidden as PostHidden;
+use Flarum\Post\Event\Restored as PostRestored;
 use Flarum\Search\Database\DatabaseSearchDriver;
-use Flarum\Settings\SettingsRepositoryInterface;
+use Flarum\User\Event\Deleting as UserDeleting;
+use Illuminate\Contracts\Bus\Dispatcher as Bus;
 
 return [
     (new Extend\Frontend('forum'))
@@ -44,6 +55,8 @@ return [
     (new Extend\ServiceProvider())
         ->register(DocketServiceProvider::class),
 
+    new BackfillOnEnable(),
+
     new Extend\ApiResource(Api\ReportResource::class),
     new Extend\ApiResource(Api\EntryResource::class),
     new Extend\ApiResource(Api\EventResource::class),
@@ -51,17 +64,13 @@ return [
     new Extend\ApiResource(Api\RuleResource::class),
 
     (new Extend\ApiResource(ForumResource::class))
-        ->fields(fn () => [
-            Schema\Boolean::make('docketNotifyByDefault')
-                ->visible(fn (object $forum, Context $context) => $context->getActor()->hasPermissionLike('discussion.viewFlags'))
-                ->get(fn () => (bool) resolve(SettingsRepositoryInterface::class)->get('ernestdefoe-docket.notify_by_default')),
-        ]),
+        ->fields(Api\ForumFields::class),
 
     // Crowd moderation counts a connection once: the address a flag is sent
     // from, read on that endpoint only.
     (new Extend\ApiResource(FlagResource::class))
         ->endpoint(Endpoint\Create::class, fn (Endpoint\Create $endpoint) => $endpoint->before(function (Context $context) {
-            resolve(Crowd::class)->address = Crowd::clientAddress($context->request);
+            resolve(Address::class)->filingFrom(Address::clientAddress($context->request));
         })),
 
     (new Extend\Settings())
@@ -76,7 +85,9 @@ return [
         ->default('ernestdefoe-docket.crowd_trust', true)
         ->default('ernestdefoe-docket.crowd_cooldown', 24)
         ->default('ernestdefoe-docket.crowd_tags', '{}')
-        ->default(Search\EntrySearcher::DAYS_SETTING, 0),
+        ->default('ernestdefoe-docket.notify_by_default', false)
+        // EntrySearcher::DAYS_SETTING, by name: extend.php reads no class constants.
+        ->default('ernestdefoe-docket.my_reports_days', 0),
 
     (new Extend\Routes('api'))
         ->get('/docket-counts', 'docket.counts', Api\Controller\CountsController::class)
@@ -108,7 +119,20 @@ return [
         ->type(CrowdActionBlueprint::class, ['alert', 'email']),
 
     (new Extend\Event())
-        ->subscribe(RecordActivity::class),
+        ->listen('eloquent.created: '.Flag::class, [RecordActivity::class, 'flagCreated'])
+        ->listen(FlagCleared::class, [RecordActivity::class, 'cleared'])
+        ->listen(PostHidden::class, [RecordActivity::class, 'hidden'])
+        ->listen(PostRestored::class, [RecordActivity::class, 'restored'])
+        ->listen(DiscussionRestored::class, [RecordActivity::class, 'discussionRestored'])
+        ->listen(PostDeleted::class, [RecordActivity::class, 'deleted'])
+        ->listen(FlagDeleting::class, [RecordActivity::class, 'flagDeleting'])
+        ->listen(UserDeleting::class, [RecordActivity::class, 'userDeleting'])
+        ->listen(GroupDeleted::class, fn () => resolve(QueueAccess::class)->forget())
+        ->listen(ExtensionDisabled::class, function (ExtensionDisabled $event) {
+            if ($event->extension->getId() === 'flarum-approval') {
+                resolve(Bus::class)->dispatch(new HideInsteadOfApproval());
+            }
+        }),
 
     (new Extend\Conditional())
         // Permission checks on each post read its discussion's tags: load

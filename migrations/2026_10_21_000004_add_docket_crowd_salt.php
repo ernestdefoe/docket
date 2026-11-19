@@ -1,20 +1,12 @@
 <?php
 
-use Illuminate\Database\Schema\Builder;
+use Flarum\Database\Migration;
 
 /*
  * The key reporters' addresses are hashed with: random per forum, so the
- * hashes can't be matched against a table of every IPv4 address.
+ * hashes can't be matched against a table of every IPv4 address. A
+ * migration runs once per forum, so the key is never replaced.
  */
-return [
-    'up' => function (Builder $schema) {
-        $settings = $schema->getConnection()->table('settings');
-
-        if (! $settings->where('key', 'ernestdefoe-docket.crowd_salt')->exists()) {
-            $settings->insert(['key' => 'ernestdefoe-docket.crowd_salt', 'value' => bin2hex(random_bytes(32))]);
-        }
-    },
-    'down' => function (Builder $schema) {
-        $schema->getConnection()->table('settings')->where('key', 'ernestdefoe-docket.crowd_salt')->delete();
-    },
-];
+return Migration::addSettings([
+    'ernestdefoe-docket.crowd_salt' => bin2hex(random_bytes(32)),
+]);

@@ -110,7 +110,7 @@ class ReporterTest extends DocketTestCase
         $stats = $this->json($this->reportsBy(self::REPORTER, self::ADMIN))['meta']['reporterStats']['all'];
 
         // Trust: 0.5 + (upheld + 1) / (upheld + wrong + 2).
-        $weight = $this->app()->getContainer()->make(Crowd::class)->weights([self::REPORTER])[self::REPORTER];
+        $weight = $this->app()->getContainer()->make(\ErnestDefoe\Docket\Crowd\Reporters::class)->weights([self::REPORTER])[self::REPORTER];
         $this->assertEqualsWithDelta(0.5 + ($stats['resolved'] + 1) / ($stats['resolved'] + $stats['rejected'] + 2), $weight, 0.0001);
     }
 

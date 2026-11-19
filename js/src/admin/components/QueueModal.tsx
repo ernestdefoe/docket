@@ -10,6 +10,7 @@ import type { Queue } from '../../common/models';
 import { save } from '../api';
 import { t } from '../t';
 import extractText from 'flarum/common/utils/extractText';
+import settle from '../../common/settle';
 
 export interface QueueModalAttrs extends IFormModalAttrs {
   queue?: Queue;
@@ -101,25 +102,25 @@ export default class QueueModal extends FormModal<QueueModalAttrs> {
       .map((id: string) => app.store.getById<Group>('groups', id))
       .filter(Boolean) as Group[];
 
-    save(
-      'docket-queues',
-      this.attrs.queue?.id() || null,
-      {
-        name: this.name().trim(),
-        description: this.description().trim() || null,
-        color: this.color() || null,
-        crowdThreshold: this.crowd() === '' ? null : Math.max(0, Math.round(Number(this.crowd()) || 0)),
-      },
-      { groups }
-    )
-      .then(() => {
+    settle(
+      save(
+        'docket-queues',
+        this.attrs.queue?.id() || null,
+        {
+          name: this.name().trim(),
+          description: this.description().trim() || null,
+          color: this.color() || null,
+          crowdThreshold: this.crowd() === '' ? null : Math.max(0, Math.round(Number(this.crowd()) || 0)),
+        },
+        { groups }
+      ),
+      () => {
         this.hide();
         this.attrs.onsaved();
-      })
-      .catch(() => {})
-      .finally(() => {
-        this.loading = false;
-        m.redraw();
-      });
+      }
+    ).finally(() => {
+      this.loading = false;
+      m.redraw();
+    });
   }
 }

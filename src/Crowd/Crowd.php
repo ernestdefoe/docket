@@ -3,21 +3,17 @@
 namespace ErnestDefoe\Docket\Crowd;
 
 use Carbon\Carbon;
-use ErnestDefoe\Docket\Docket;
-use ErnestDefoe\Docket\Entry;
+use ErnestDefoe\Docket\Integrations;
 use ErnestDefoe\Docket\Notification\CrowdActionBlueprint;
 use ErnestDefoe\Docket\Report;
 use Flarum\Approval\Event\PostWasApproved;
 use Flarum\Discussion\Discussion;
-use Flarum\Extension\ExtensionManager;
-use Flarum\Group\Group;
 use Flarum\Notification\NotificationSyncer;
 use Flarum\Post\CommentPost;
 use Flarum\Post\Post;
 use Flarum\Settings\SettingsRepositoryInterface;
 use Flarum\User\User;
 use Illuminate\Contracts\Events\Dispatcher;
-use Psr\Http\Message\ServerRequestInterface;
 
 /**
  * Crowd moderation: when enough trusted members report a post within a
@@ -41,90 +37,28 @@ class Crowd
     /** Crowd states with the post out of view. */
     public const ACTED = [self::HIDDEN, self::APPROVAL];
 
-    /** The most one person can count for, with trust on. */
-    public const MAX_WEIGHT = 1.5;
-
     protected const SETTING = 'ernestdefoe-docket.crowd_';
 
     /**
-     * The address of the request that is filing a flag, set by the flag
-     * endpoint. On the instance (a singleton per app), not static, so it
-     * never carries over to another request in a long-running process.
+     * Posts crowd moderation is hiding or restoring itself: it logs that in
+     * its own words, so Docket leaves the post events it raises unlogged.
+     *
+     * @var array<int, true>
      */
-    public ?string $address = null;
+    protected array $quiet = [];
 
     public function __construct(
         protected SettingsRepositoryInterface $settings,
-        protected ExtensionManager $extensions,
+        protected Integrations $integrations,
         protected Dispatcher $events,
         protected NotificationSyncer $notifications,
-        protected LinkedAccounts $links
+        protected Reporters $reporters
     ) {
-    }
-
-    /**
-     * Where a request came from. Flarum sees only the connection's address;
-     * behind a reverse proxy on the same machine or network (Docker, a local
-     * nginx) that is the proxy's for everyone. So when the connection is
-     * from a private or loopback address, the proxy's X-Forwarded-For is
-     * read from the right: the first public address in it is the one the
-     * proxy saw. Entries to its left are whatever the client sent, and are
-     * never trusted. A public connection's header is ignored.
-     */
-    public static function clientAddress(ServerRequestInterface $request): ?string
-    {
-        $remote = $request->getAttribute('ipAddress');
-
-        if (! is_string($remote) || self::isPublic($remote)) {
-            return is_string($remote) ? $remote : null;
-        }
-
-        $hops = array_reverse(array_map('trim', explode(',', $request->getHeaderLine('X-Forwarded-For'))));
-
-        foreach ($hops as $hop) {
-            if (! filter_var($hop, FILTER_VALIDATE_IP)) {
-                break;
-            }
-
-            if (self::isPublic($hop)) {
-                return $hop;
-            }
-        }
-
-        return $remote;
-    }
-
-    protected static function isPublic(string $ip): bool
-    {
-        return (bool) filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
     }
 
     public function enabled(): bool
     {
         return (bool) $this->setting('enabled');
-    }
-
-    /**
-     * A keyed hash of the current request's address, for a new entry. IPv6
-     * by its /64, which one connection is usually given whole.
-     */
-    public function addressHash(): ?string
-    {
-        $ip = $this->address;
-
-        if (! $ip || ! filter_var($ip, FILTER_VALIDATE_IP)) {
-            return null;
-        }
-
-        $packed = (string) inet_pton($ip);
-
-        if (strlen($packed) === 16) {
-            $packed = str_starts_with($packed, str_repeat("\0", 10)."\xff\xff")
-                ? substr($packed, 12)
-                : substr($packed, 0, 8);
-        }
-
-        return hash_hmac('sha256', $packed, (string) $this->settings->get('ernestdefoe-docket.crowd_salt'));
     }
 
     /**
@@ -143,42 +77,11 @@ class Crowd
             return;
         }
 
-        $since = Carbon::now()->subHours(max(1, (int) $this->setting('window')));
+        $data = $this->reporters->weigh($report, $post, $threshold, max(1, (int) $this->setting('window')));
 
-        $entries = $report->entries()
-            ->where('type', 'user')
-            ->whereNotNull('user_id')
-            ->whereNotNull('ip_hash')
-            ->where('created_at', '>=', $since)
-            ->when($post->user_id, fn ($q) => $q->where('user_id', '!=', $post->user_id))
-            ->get(['user_id', 'reason', 'ip_hash']);
-
-        // Not enough people even if every one of them counted in full.
-        $userIds = $entries->pluck('user_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
-
-        if (count($userIds) < 2 || count($userIds) * self::MAX_WEIGHT < $threshold) {
+        if (! $data) {
             return;
         }
-
-        $reporters = $this->eligible($userIds);
-
-        if (count($reporters) < 2) {
-            return;
-        }
-
-        $weights = $this->weights(array_keys($reporters), $report->id);
-        [$people, $weight] = $this->tally($entries->whereIn('user_id', array_keys($reporters)), $weights);
-
-        if ($people < 2 || $weight < $threshold) {
-            return;
-        }
-
-        $data = [
-            'people' => $people,
-            'weight' => round($weight, 2),
-            'threshold' => $threshold,
-            'reason' => $this->topReason($entries->whereIn('user_id', array_keys($reporters))),
-        ];
 
         if ($why = $this->held($post)) {
             $this->mark($report, self::HELD, 'crowd_held', null, $data + ['why' => $why]);
@@ -203,7 +106,9 @@ class Crowd
 
         $target = $this->target($post);
 
-        return $report->crowd_state === self::APPROVAL
+        // With flarum/approval disabled since, nobody holds its permission:
+        // putting the post back is then for whoever may hide it.
+        return $report->crowd_state === self::APPROVAL && $this->integrations->approval
             ? $actor->can('approve', $post)
             : $actor->can('hide', $target);
     }
@@ -216,17 +121,73 @@ class Crowd
         $post = $report->post;
 
         if ($post) {
-            $docket = resolve(Docket::class);
-            $docket->quiet[$post->id] = true;
-
-            try {
-                $report->crowd_state === self::APPROVAL ? $this->approve($post, $actor) : $this->unhide($post);
-            } finally {
-                unset($docket->quiet[$post->id]);
-            }
+            $this->quietly($post, fn () => $report->crowd_state === self::APPROVAL ? $this->approve($post, $actor) : $this->unhide($post));
         }
 
         $this->restored($report, $actor);
+    }
+
+    /**
+     * flarum/approval was just disabled: what the crowd sent back to approval
+     * would stay private, out of everyone's sight and its report's too. Each
+     * is hidden instead, which staff can see and restore without it.
+     */
+    public function approvalDisabled(): void
+    {
+        Report::query()
+            ->where('crowd_state', self::APPROVAL)
+            ->with('post.discussion')
+            ->chunkById(100, function ($reports) {
+                foreach ($reports as $report) {
+                    $this->hideInstead($report);
+                }
+            });
+    }
+
+    protected function hideInstead(Report $report): void
+    {
+        $post = $report->post;
+
+        if ($post) {
+            $target = $this->target($post);
+
+            $this->quietly($post, function () use ($post, $target) {
+                // Approved and not private by its own columns, so it stays
+                // that way if flarum/approval is enabled again; hidden instead.
+                $post->setAttribute('is_approved', true);
+                $post->is_private = false;
+
+                if ($target instanceof Discussion) {
+                    $post->save();
+                    $target->setAttribute('is_approved', true);
+                    $target->is_private = false;
+                }
+
+                $target->hide();
+                $target->save();
+                $this->dispatch($target);
+                $this->recount($post, true);
+            });
+        }
+
+        $this->mark($report, self::HIDDEN, 'crowd_moved', null);
+    }
+
+    /** Whether crowd moderation is hiding or restoring this post itself. */
+    public function isQuiet(int $postId): bool
+    {
+        return isset($this->quiet[$postId]);
+    }
+
+    protected function quietly(Post $post, callable $action): void
+    {
+        $this->quiet[$post->id] = true;
+
+        try {
+            $action();
+        } finally {
+            unset($this->quiet[$post->id]);
+        }
     }
 
     /**
@@ -244,12 +205,9 @@ class Crowd
 
     protected function act(Report $report, Post $post, array $data): void
     {
-        $mode = $this->setting('action') === self::APPROVAL && $this->extensions->isEnabled('flarum-approval') ? self::APPROVAL : self::HIDDEN;
+        $mode = $this->setting('action') === self::APPROVAL && $this->integrations->approval ? self::APPROVAL : self::HIDDEN;
         $target = $this->target($post);
-        $docket = resolve(Docket::class);
-        $docket->quiet[$post->id] = true;
-
-        try {
+        $this->quietly($post, function () use ($mode, $post, $target) {
             if ($mode === self::APPROVAL) {
                 $this->unapprove($post);
             } else {
@@ -257,9 +215,7 @@ class Crowd
                 $target->save();
                 $this->dispatch($target);
             }
-        } finally {
-            unset($docket->quiet[$post->id]);
-        }
+        });
 
         $this->mark($report, $mode, $mode === self::APPROVAL ? 'crowd_approval' : 'crowd_hidden', null, $data + ['discussion' => $target instanceof Discussion]);
 
@@ -295,11 +251,50 @@ class Crowd
         $post->setAttribute('is_approved', false);
         $post->save();
 
+        $this->recount($post, false);
+    }
+
+    /**
+     * As flarum/approval approves: its listeners put the counts back. When
+     * it has been disabled since the crowd acted, its event class may be
+     * gone, so the post is approved here and the counts redone.
+     */
+    protected function approve(Post $post, User $actor): void
+    {
+        if ($post->getAttribute('is_approved')) {
+            return;
+        }
+
+        $post->setAttribute('is_approved', true);
+
+        if (! $this->integrations->approval) {
+            // Its privacy check went with it, so nothing else clears this;
+            // another extension's check still runs as the models are saved.
+            $post->is_private = false;
+            $post->save();
+
+            if ($this->target($post) instanceof Discussion) {
+                $post->discussion->is_private = false;
+            }
+
+            $this->recount($post, true);
+
+            return;
+        }
+
+        $post->raise(new PostWasApproved($post, $actor));
+        $post->save();
+        $this->dispatch($post);
+    }
+
+    /** The post's discussion and author counts, after it left or came back. */
+    protected function recount(Post $post, bool $approved): void
+    {
         $discussion = $post->discussion;
 
         if ($discussion) {
             if ($this->target($post) instanceof Discussion) {
-                $discussion->setAttribute('is_approved', false);
+                $discussion->setAttribute('is_approved', $approved);
             }
 
             $discussion->refreshCommentCount();
@@ -311,19 +306,6 @@ class Crowd
             $post->user->refreshCommentCount();
             $post->user->save();
         }
-    }
-
-    /** As flarum/approval approves: its listeners put the counts back. */
-    protected function approve(Post $post, User $actor): void
-    {
-        if ($post->getAttribute('is_approved')) {
-            return;
-        }
-
-        $post->setAttribute('is_approved', true);
-        $post->raise(new PostWasApproved($post, $actor));
-        $post->save();
-        $this->dispatch($post);
     }
 
     protected function dispatch(Post|Discussion $model): void
@@ -383,7 +365,7 @@ class Crowd
                 return 'staff';
             }
 
-            if (array_intersect($this->ids('exempt_groups'), array_map('intval', $author->groups->pluck('id')->all()))) {
+            if (array_intersect($this->reporters->ids('exempt_groups'), array_map('intval', $author->groups->pluck('id')->all()))) {
                 return 'exempt';
             }
         }
@@ -416,9 +398,8 @@ class Crowd
 
         $byTag = $this->tagThresholds();
 
-        if ($byTag && $post->discussion_id && $this->extensions->isEnabled('flarum-tags')) {
-            $tagIds = $post->getConnection()->table('discussion_tag')->where('discussion_id', $post->discussion_id)->pluck('tag_id')->map(fn ($id) => (int) $id)->all();
-            $set = array_intersect_key($byTag, array_flip($tagIds));
+        if ($byTag) {
+            $set = array_intersect_key($byTag, array_flip($this->integrations->tagIds($post->discussion_id)));
 
             if ($set) {
                 return in_array(0, $set, true) ? 0 : $this->atLeastTwo(max($set));
@@ -446,154 +427,6 @@ class Crowd
         }
 
         return $out;
-    }
-
-    /**
-     * The reporters who count, by id: members long enough, with enough
-     * posts, in a counting group, not suspended.
-     *
-     * @param int[] $userIds
-     * @return array<int, User>
-     */
-    protected function eligible(array $userIds): array
-    {
-        $joinedBefore = Carbon::now()->subDays(max(0, (int) $this->setting('min_age')));
-        $minPosts = max(0, (int) $this->setting('min_posts'));
-        $groups = $this->ids('groups');
-        $now = Carbon::now();
-
-        return User::query()
-            ->whereIn('id', $userIds)
-            ->where('joined_at', '<=', $joinedBefore)
-            ->where('comment_count', '>=', $minPosts)
-            ->with('groups')
-            ->get()
-            ->filter(function (User $user) use ($groups, $now) {
-                $until = $user->getAttribute('suspended_until');
-
-                if ($until && Carbon::parse($until)->gt($now)) {
-                    return false;
-                }
-
-                return ! $groups || array_intersect($groups, array_map('intval', $user->groups->pluck('id')->all()));
-            })
-            ->keyBy('id')
-            ->all();
-    }
-
-    /**
-     * Each reporter's weight. With trust on, from their closed reports:
-     * 0.5 for someone always wrong, 1.5 for someone always right, 1 for
-     * someone new. A report closed by restoring the post counts as wrong
-     * even if staff later resolved it.
-     *
-     * @param int[] $userIds
-     * @return array<int, float>
-     */
-    public function weights(array $userIds, ?int $exceptReport = null): array
-    {
-        $weights = array_fill_keys($userIds, 1.0);
-
-        if (! $userIds || ! $this->setting('trust')) {
-            return $weights;
-        }
-
-        $entries = (new Entry())->getTable();
-        $reports = (new Report())->getTable();
-        $grammar = Entry::query()->getQuery()->getGrammar();
-        $status = $grammar->wrap("$reports.status");
-        $state = $grammar->wrap("$reports.crowd_state");
-
-        $rows = Entry::query()
-            ->join($reports, "$reports.id", '=', "$entries.report_id")
-            ->whereIn("$entries.user_id", $userIds)
-            ->where("$entries.type", 'user')
-            ->when($exceptReport, fn ($q) => $q->where("$entries.report_id", '!=', $exceptReport))
-            ->groupBy("$entries.user_id")
-            ->select("$entries.user_id")
-            ->selectRaw("sum(case when $status = ? and ($state is null or $state <> ?) then 1 else 0 end) as upheld", [Report::RESOLVED, self::RESTORED])
-            ->selectRaw("sum(case when $status = ? or $state = ? then 1 else 0 end) as wrong", [Report::REJECTED, self::RESTORED])
-            ->toBase()
-            ->get();
-
-        foreach ($rows as $row) {
-            $upheld = (int) $row->upheld;
-            $wrong = (int) $row->wrong;
-            $weights[(int) $row->user_id] = 0.5 + ($upheld + 1) / ($upheld + $wrong + 2);
-        }
-
-        return $weights;
-    }
-
-    /**
-     * People and their weight. Reporters sharing an address, or linked by
-     * an alt-account extension, are one person, counted at the weight of
-     * the most trusted of them.
-     *
-     * @param iterable<Entry> $entries
-     * @param array<int, float> $weights
-     * @return array{0: int, 1: float}
-     */
-    protected function tally(iterable $entries, array $weights): array
-    {
-        $parent = [];
-        $find = function (string $x) use (&$parent, &$find): string {
-            if (! isset($parent[$x])) {
-                $parent[$x] = $x;
-            }
-
-            return $parent[$x] === $x ? $x : ($parent[$x] = $find($parent[$x]));
-        };
-        $join = function (string $a, string $b) use (&$parent, $find) {
-            $parent[$find($a)] = $find($b);
-        };
-
-        $userIds = [];
-
-        foreach ($entries as $entry) {
-            $userIds[] = (int) $entry->user_id;
-            $join('u'.$entry->user_id, 'ip'.$entry->ip_hash);
-        }
-
-        $userIds = array_values(array_unique($userIds));
-
-        foreach ($this->links->people($userIds) as $userId => $key) {
-            if (in_array((int) $userId, $userIds, true)) {
-                $join('u'.$userId, 'p'.$key);
-            }
-        }
-
-        $people = [];
-
-        foreach ($userIds as $userId) {
-            $root = $find('u'.$userId);
-            $people[$root] = max($people[$root] ?? 0, $weights[$userId] ?? 1.0);
-        }
-
-        return [count($people), array_sum($people)];
-    }
-
-    /** @param iterable<Entry> $entries */
-    protected function topReason(iterable $entries): string
-    {
-        $counts = [];
-
-        foreach ($entries as $entry) {
-            $reason = $entry->reason ?: 'other';
-            $counts[$reason] = ($counts[$reason] ?? 0) + 1;
-        }
-
-        arsort($counts);
-
-        return (string) (array_key_first($counts) ?? 'other');
-    }
-
-    /** @return int[] */
-    protected function ids(string $key): array
-    {
-        $ids = json_decode((string) $this->setting($key), true);
-
-        return is_array($ids) ? array_values(array_diff(array_map('intval', array_filter($ids, 'is_numeric')), [Group::GUEST_ID])) : [];
     }
 
     protected function setting(string $key): mixed

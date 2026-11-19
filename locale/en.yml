@@ -173,6 +173,7 @@ ernestdefoe-docket:
       crowd_held_staff: "{people} members reported it, enough to hide it, but the author is staff: left for you"
       crowd_held_exempt: "{people} members reported it, enough to hide it, but the author's group is exempt: left for you"
       crowd_held_cooldown: "{people} members reported it, enough to hide it, but it was restored recently: left for you"
+      crowd_moved: "Hidden instead: Approval was disabled while the post waited for it"
       crowd_restored: "{actor} restored what the reports hid; it counts against the people who reported it"
 
     crowd:

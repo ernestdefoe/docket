@@ -21,7 +21,7 @@ class RuleFacts
     public function __construct(
         protected Flag $flag,
         protected Post $post,
-        protected bool $tagsEnabled
+        protected Integrations $integrations
     ) {
     }
 
@@ -61,9 +61,7 @@ class RuleFacts
     protected function tagIds(): array
     {
         if ($this->tagIds === null) {
-            $this->tagIds = $this->tagsEnabled && $this->post->discussion_id
-                ? $this->post->getConnection()->table('discussion_tag')->where('discussion_id', $this->post->discussion_id)->pluck('tag_id')->map(fn ($id) => (int) $id)->all()
-                : [];
+            $this->tagIds = $this->integrations->tagIds($this->post->discussion_id);
         }
 
         return $this->tagIds;

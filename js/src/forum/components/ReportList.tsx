@@ -7,6 +7,7 @@ import type Mithril from 'mithril';
 import type { Report } from '../../common/models';
 import ReportListItem from './ReportListItem';
 import { t } from '../t';
+import settle from '../../common/settle';
 
 export interface ReportListAttrs extends ComponentAttrs {
   filter: Record<string, string>;
@@ -50,25 +51,24 @@ export default class ReportList extends Component<ReportListAttrs> {
     this.loading = true;
     const key = this.key;
 
-    app.store
-      .find<Report[]>('docket-reports', {
+    settle(
+      app.store.find<Report[]>('docket-reports', {
         filter: this.attrs.filter,
         include: 'post,post.user,user,assignee,queue,entries',
         page: { offset, limit: this.attrs.limit || 20 },
-      })
-      .then((results) => {
+      }),
+      (results) => {
         // A newer filter replaced this one while it loaded.
         if (key !== this.key) return;
 
         this.fetched += results.length;
         this.reports.push(...results.filter((report) => report.id() !== this.attrs.except));
         this.more = !this.attrs.brief && !!(results as any).payload?.links?.next;
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (key === this.key) this.loading = false;
-        m.redraw();
-      });
+      }
+    ).finally(() => {
+      if (key === this.key) this.loading = false;
+      m.redraw();
+    });
   }
 
   view() {

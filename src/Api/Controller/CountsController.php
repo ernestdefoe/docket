@@ -2,7 +2,6 @@
 
 namespace ErnestDefoe\Docket\Api\Controller;
 
-use ErnestDefoe\Docket\Docket;
 use ErnestDefoe\Docket\Report;
 use Flarum\Http\RequestUtil;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -21,8 +20,6 @@ class CountsController implements RequestHandlerInterface
         $actor = RequestUtil::getActor($request);
         $actor->assertRegistered();
         $actor->assertPermission($actor->hasPermissionLike('discussion.viewFlags'));
-
-        resolve(Docket::class)->backfill();
 
         $rows = Report::whereVisibleTo($actor)
             ->whereIn('docket_reports.status', Report::ACTIVE)

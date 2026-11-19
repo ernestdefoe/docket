@@ -23,6 +23,7 @@ import ReportList from './ReportList';
 import { t } from '../t';
 import { docketNav, docketPage } from './DocketHero';
 import extractText from 'flarum/common/utils/extractText';
+import settle from '../../common/settle';
 
 /**
  * One report: the post, who reported it and why, who holds it, its queue
@@ -53,11 +54,7 @@ export default class ReportPage extends Page {
     docketNav(t('nav.report_centre'));
     this.load();
 
-    app.store
-      .find<Queue[]>('docket-queues')
-      .then((queues) => (this.queues = queues))
-      .catch(() => {})
-      .finally(() => m.redraw());
+    settle(app.store.find<Queue[]>('docket-queues'), (queues) => (this.queues = queues)).finally(() => m.redraw());
   }
 
   onupdate(vnode: Mithril.VnodeDOM) {
@@ -74,15 +71,11 @@ export default class ReportPage extends Page {
   }
 
   load() {
-    return app.store
-      .find<Report>('docket-reports', m.route.param('id'))
-      .then((report) => {
-        this.report = report;
-        this.records = (report as any).payload?.meta?.reporterStats || {};
-        app.setTitle(extractText(t('report.title', { id: report.id() })));
-      })
-      .catch(() => {})
-      .finally(() => m.redraw());
+    return settle(app.store.find<Report>('docket-reports', m.route.param('id')), (report) => {
+      this.report = report;
+      this.records = (report as any).payload?.meta?.reporterStats || {};
+      app.setTitle(extractText(t('report.title', { id: report.id() })));
+    }).finally(() => m.redraw());
   }
 
   view() {
@@ -155,17 +148,14 @@ export default class ReportPage extends Page {
 
     const putBack = this.putBack(this.report);
 
-    updateReport(this.report, { status: 'rejected' })
-      .then(() => {
-        putBack();
-        this.dropFlagCounts();
-        return this.load();
-      })
-      .catch(() => {})
-      .finally(() => {
-        this.busy = false;
-        m.redraw();
-      });
+    settle(updateReport(this.report, { status: 'rejected' }), () => {
+      putBack();
+      this.dropFlagCounts();
+      return this.load();
+    }).finally(() => {
+      this.busy = false;
+      m.redraw();
+    });
   }
 
   /**
@@ -243,7 +233,7 @@ export default class ReportPage extends Page {
 
   /** fof/moderator-warnings: the author's warning count, linked. */
   warnings(user: User | null | false | undefined) {
-    if (!user || !(app.routes as any)['user.warnings']) return null;
+    if (!user || !('fof-moderator-warnings' in flarum.extensions)) return null;
 
     const count = user.attribute<number | undefined>('visibleWarningCount');
     if (count === undefined) return null;
@@ -290,45 +280,11 @@ export default class ReportPage extends Page {
   }
 
   controls(report: Report) {
-    const me = app.session.user!;
-    const assignee = report.assignee();
-    const mine = !!assignee && assignee.id() === me.id();
-    const mayHandOver = report.canAssignOthers();
     const active = report.isActive();
 
     return (
       <section className="DocketCard DocketControls">
-        <div className="DocketControls-row">
-          <div className="DocketControls-label">{t(active ? 'report.held_by' : 'report.handled_by')}</div>
-          <div className="DocketControls-holder">
-            {assignee ? (
-              <span className="DocketControls-user">
-                <Avatar user={assignee} /> {username(assignee)}
-              </span>
-            ) : (
-              <span className="DocketControls-none">{t('report.no_one')}</span>
-            )}
-          </div>
-          {active ? (
-            <div className="DocketControls-buttons">
-              {!mine && (!assignee || mayHandOver) ? (
-                <Button className="Button Button--primary" icon="fas fa-hand" loading={this.busy} onclick={() => this.change({}, { assignee: me })}>
-                  {t(assignee ? 'report.take_over' : 'report.claim')}
-                </Button>
-              ) : null}
-              {assignee && (mine || mayHandOver) ? (
-                <Button className="Button" icon="fas fa-hand-point-left" disabled={this.busy} onclick={() => this.change({}, { assignee: null })}>
-                  {t(mine ? 'report.release' : 'report.unassign')}
-                </Button>
-              ) : null}
-              {mayHandOver ? (
-                <Button className="Button" icon="fas fa-user-plus" disabled={this.busy} onclick={() => this.assign(report)}>
-                  {t('report.assign')}
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+        {this.holderRow(report)}
 
         <div className="DocketControls-row">
           <label className="DocketControls-label" for="docket-queue">
@@ -347,32 +303,7 @@ export default class ReportPage extends Page {
           )}
         </div>
 
-        <div className="DocketControls-actions">
-          {active ? (
-            [
-              <Button
-                className="Button DocketControls-resolve"
-                icon="fas fa-circle-check"
-                disabled={this.busy}
-                onclick={() => this.close(report, 'resolved')}
-              >
-                {t('report.resolve')}
-              </Button>,
-              <Button
-                className="Button DocketControls-reject"
-                icon="fas fa-circle-xmark"
-                disabled={this.busy}
-                onclick={() => this.close(report, 'rejected')}
-              >
-                {t('report.reject')}
-              </Button>,
-            ]
-          ) : (
-            <Button className="Button" icon="fas fa-rotate-left" loading={this.busy} onclick={() => this.change({ status: 'in_progress' })}>
-              {t('report.reopen')}
-            </Button>
-          )}
-        </div>
+        {this.actions(report, active)}
 
         {!active && report.reportersNotified() ? (
           <div className="DocketControls-told">
@@ -380,6 +311,80 @@ export default class ReportPage extends Page {
           </div>
         ) : null}
       </section>
+    );
+  }
+
+  /** Who holds the report, and claiming, releasing or handing it over. */
+  holderRow(report: Report) {
+    const me = app.session.user!;
+    const assignee = report.assignee();
+    const mine = !!assignee && assignee.id() === me.id();
+    const mayHandOver = report.canAssignOthers();
+    const active = report.isActive();
+    return (
+      <div className="DocketControls-row">
+        <div className="DocketControls-label">{t(active ? 'report.held_by' : 'report.handled_by')}</div>
+        <div className="DocketControls-holder">
+          {assignee ? (
+            <span className="DocketControls-user">
+              <Avatar user={assignee} /> {username(assignee)}
+            </span>
+          ) : (
+            <span className="DocketControls-none">{t('report.no_one')}</span>
+          )}
+        </div>
+        {active ? (
+          <div className="DocketControls-buttons">
+            {!mine && (!assignee || mayHandOver) ? (
+              <Button className="Button Button--primary" icon="fas fa-hand" loading={this.busy} onclick={() => this.change({}, { assignee: me })}>
+                {t(assignee ? 'report.take_over' : 'report.claim')}
+              </Button>
+            ) : null}
+            {assignee && (mine || mayHandOver) ? (
+              <Button className="Button" icon="fas fa-hand-point-left" disabled={this.busy} onclick={() => this.change({}, { assignee: null })}>
+                {t(mine ? 'report.release' : 'report.unassign')}
+              </Button>
+            ) : null}
+            {mayHandOver ? (
+              <Button className="Button" icon="fas fa-user-plus" disabled={this.busy} onclick={() => this.assign(report)}>
+                {t('report.assign')}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  /** Resolve or reject, or reopen once closed. */
+  actions(report: Report, active: boolean) {
+    return (
+      <div className="DocketControls-actions">
+        {active ? (
+          [
+            <Button
+              className="Button DocketControls-resolve"
+              icon="fas fa-circle-check"
+              disabled={this.busy}
+              onclick={() => this.close(report, 'resolved')}
+            >
+              {t('report.resolve')}
+            </Button>,
+            <Button
+              className="Button DocketControls-reject"
+              icon="fas fa-circle-xmark"
+              disabled={this.busy}
+              onclick={() => this.close(report, 'rejected')}
+            >
+              {t('report.reject')}
+            </Button>,
+          ]
+        ) : (
+          <Button className="Button" icon="fas fa-rotate-left" loading={this.busy} onclick={() => this.change({ status: 'in_progress' })}>
+            {t('report.reopen')}
+          </Button>
+        )}
+      </div>
     );
   }
 
@@ -398,13 +403,10 @@ export default class ReportPage extends Page {
     if (!this.report) return;
     this.busy = true;
 
-    updateReport(this.report, attributes, relationships)
-      .then(() => this.load())
-      .catch(() => {})
-      .finally(() => {
-        this.busy = false;
-        m.redraw();
-      });
+    settle(updateReport(this.report, attributes, relationships), () => this.load()).finally(() => {
+      this.busy = false;
+      m.redraw();
+    });
   }
 
   assign(report: Report) {
@@ -481,18 +483,13 @@ export default class ReportPage extends Page {
     if (!this.note().trim()) return;
     this.saving = true;
 
-    app.store
-      .createRecord('docket-events')
-      .save({ body: this.note(), relationships: { report } })
-      .then(() => {
-        this.note('');
-        return this.load();
-      })
-      .catch(() => {})
-      .finally(() => {
-        this.saving = false;
-        m.redraw();
-      });
+    settle(app.store.createRecord('docket-events').save({ body: this.note(), relationships: { report } }), () => {
+      this.note('');
+      return this.load();
+    }).finally(() => {
+      this.saving = false;
+      m.redraw();
+    });
   }
 
   history(report: Report) {

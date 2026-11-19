@@ -18,12 +18,12 @@ class VisibilityTest extends DocketTestCase
 
         // A flag on every post, hidden and restricted ones included, raised
         // straight into the table (members can't flag what they can't see),
-        // then filed by opening the report centre.
+        // then filed as enabling Docket files them.
         foreach ([1, 2, 3, 4, 5] as $post) {
             $this->database()->table('flags')->insert(['post_id' => $post, 'user_id' => self::REPORTER, 'type' => 'user', 'reason' => 'spam', 'created_at' => Carbon::now()]);
         }
 
-        $this->get('/api/docket-counts', self::ADMIN);
+        $this->enableDocket();
     }
 
     /** @return int[] */

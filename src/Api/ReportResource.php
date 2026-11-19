@@ -14,7 +14,6 @@ use Flarum\Api\Schema;
 use Flarum\Api\Sort\SortColumn;
 use Flarum\Discussion\Discussion;
 use Flarum\Foundation\ValidationException;
-use Flarum\Http\SlugManager;
 use Flarum\Locale\TranslatorInterface;
 use Flarum\Post\Post;
 use Flarum\User\User;
@@ -37,16 +36,12 @@ class ReportResource extends AbstractDatabaseResource
     protected ?WeakMap $changes = null;
 
     public function __construct(
-        protected TranslatorInterface $translator
+        protected TranslatorInterface $translator,
+        protected Docket $docket,
+        protected Crowd $crowd,
+        protected ReporterStats $stats,
+        protected PostPlace $places
     ) {
-    }
-
-    /**
-     * Resolved on use: every API resource is built on every API request.
-     */
-    protected function docket(): Docket
-    {
-        return resolve(Docket::class);
     }
 
     public function type(): string
@@ -82,7 +77,7 @@ class ReportResource extends AbstractDatabaseResource
                 ->meta([
                     // Each reporter's record, by time frame, keyed by user id.
                     Schema\Arr::make('reporterStats')
-                        ->get(fn (Report $report, Context $context) => (object) resolve(ReporterStats::class)->forUsers(
+                        ->get(fn (Report $report, Context $context) => (object) $this->stats->forUsers(
                             $report->entries->where('type', 'user')->pluck('user_id')->filter()->all(),
                             $context->getActor()
                         )),
@@ -95,9 +90,12 @@ class ReportResource extends AbstractDatabaseResource
 
     public function fields(): array
     {
-        // No `discussion` relationship: notifications include
-        // `subject.discussion` for every subject type that has one, and for a
-        // report that would be a query per notification. It is post.discussion.
+        return [...$this->attributes(), ...$this->relationships()];
+    }
+
+    /** @return array<Schema\Attribute> */
+    protected function attributes(): array
+    {
         return [
             Schema\Str::make('status')
                 ->writable()
@@ -134,7 +132,19 @@ class ReportResource extends AbstractDatabaseResource
             Schema\DateTime::make('closedAt'),
             Schema\Boolean::make('canAssignOthers')
                 ->get(fn (Report $report, FlarumContext $context) => $context->getActor()->hasPermission('docket.assignOthers')),
+        ];
+    }
 
+    /**
+     * No `discussion` relationship: notifications include
+     * `subject.discussion` for every subject type that has one, and for a
+     * report that would be a query per notification. It is post.discussion.
+     *
+     * @return array<Schema\Relationship\ToOne|Schema\Relationship\ToMany>
+     */
+    protected function relationships(): array
+    {
+        return [
             Schema\Relationship\ToOne::make('post')
                 ->includable()
                 ->nullable(),
@@ -179,7 +189,7 @@ class ReportResource extends AbstractDatabaseResource
     protected function withPost(Report $report): mixed
     {
         if ($report->relationLoaded('post') && (! $report->post || $report->post->relationLoaded('discussion'))) {
-            return self::place($report->post);
+            return $this->places->of($report->post);
         }
 
         $this->waiting[] = $report;
@@ -190,29 +200,8 @@ class ReportResource extends AbstractDatabaseResource
                 $this->waiting = [];
             }
 
-            return self::place($report->post);
+            return $this->places->of($report->post);
         };
-    }
-
-    /**
-     * Where a post is, for a link to it: its discussion's slug (as the
-     * forum's slug driver writes it) and title, and the post's number.
-     *
-     * @return array{slug: string, title: string, number: int}|null
-     */
-    public static function place(?Post $post): ?array
-    {
-        $discussion = $post?->discussion;
-
-        if (! $discussion) {
-            return null;
-        }
-
-        return [
-            'slug' => resolve(SlugManager::class)->forResource(Discussion::class)->toSlug($discussion),
-            'title' => (string) $discussion->title,
-            'number' => (int) $post->number,
-        ];
     }
 
     public function sorts(): array
@@ -244,11 +233,11 @@ class ReportResource extends AbstractDatabaseResource
 
         $model->getConnection()->transaction(function () use ($model, $changes, $actor) {
             if (array_key_exists('queue', $changes)) {
-                $this->docket()->move($model, $changes['queue'], $actor);
+                $this->docket->move($model, $changes['queue'], $actor);
             }
 
             if (array_key_exists('assignee', $changes)) {
-                $this->docket()->assign($model, $changes['assignee'], $actor);
+                $this->docket->assign($model, $changes['assignee'], $actor);
             }
 
             if (isset($changes['status']) && $changes['status'] !== $model->status) {
@@ -257,16 +246,16 @@ class ReportResource extends AbstractDatabaseResource
                 if (! in_array($status, Report::ACTIVE, true)) {
                     // Rejecting what the crowd hid puts it back.
                     if ($status === Report::REJECTED && in_array($model->crowd_state, Crowd::ACTED, true)) {
-                        resolve(Crowd::class)->restore($model, $actor);
+                        $this->crowd->restore($model, $actor);
                     }
 
-                    $this->docket()->close($model, $status, $actor, (bool) ($changes['notify'] ?? false), $changes['outcome'] ?? null);
+                    $this->docket->close($model, $status, $actor, (bool) ($changes['notify'] ?? false), $changes['outcome'] ?? null);
                 } elseif (! $model->isActive()) {
-                    $this->docket()->reopen($model, $status, $actor);
+                    $this->docket->reopen($model, $status, $actor);
                 } elseif ($status === Report::OPEN) {
-                    $this->docket()->assign($model, null, $actor);
+                    $this->docket->assign($model, null, $actor);
                 } else {
-                    $this->docket()->assign($model, $actor, $actor);
+                    $this->docket->assign($model, $actor, $actor);
                 }
             }
         });
@@ -299,7 +288,7 @@ class ReportResource extends AbstractDatabaseResource
                 $this->fail('assignee', 'assign_others');
             }
 
-            if ($to && $to->id !== $actor->id && ! $this->docket()->canSee($to, $report)) {
+            if ($to && $to->id !== $actor->id && ! $this->docket->canSee($to, $report)) {
                 $this->fail('assignee', 'cannot_see');
             }
         }
@@ -314,7 +303,7 @@ class ReportResource extends AbstractDatabaseResource
             ($changes['status'] ?? null) === Report::REJECTED
             && $report->isActive()
             && in_array($report->crowd_state, Crowd::ACTED, true)
-            && ! resolve(Crowd::class)->mayRestore($report, $actor)
+            && ! $this->crowd->mayRestore($report, $actor)
         ) {
             $this->fail('status', 'cannot_restore');
         }

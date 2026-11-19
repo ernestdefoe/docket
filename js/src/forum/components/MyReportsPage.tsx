@@ -10,6 +10,7 @@ import type { Entry } from '../../common/models';
 import { placeUrl, statusBadge, reasonLabel } from '../labels';
 import { t } from '../t';
 import { docketNav, docketPage } from './DocketHero';
+import settle from '../../common/settle';
 
 /** How far back the list goes, in words, for the settings admins choose from. */
 function since(days: number) {
@@ -43,18 +44,14 @@ export default class MyReportsPage extends Page {
   load(offset: number) {
     this.loading = true;
 
-    app.store
-      .find<Entry[]>('docket-entries', { page: { offset, limit: 20 } })
-      .then((entries) => {
-        this.entries.push(...entries);
-        this.days = (entries as any).payload?.meta?.reportsDays || 0;
-        this.more = !!(entries as any).payload?.links?.next;
-      })
-      .catch(() => {})
-      .finally(() => {
-        this.loading = false;
-        m.redraw();
-      });
+    settle(app.store.find<Entry[]>('docket-entries', { page: { offset, limit: 20 } }), (entries) => {
+      this.entries.push(...entries);
+      this.days = (entries as any).payload?.meta?.reportsDays || 0;
+      this.more = !!(entries as any).payload?.links?.next;
+    }).finally(() => {
+      this.loading = false;
+      m.redraw();
+    });
   }
 
   view() {

@@ -31,7 +31,7 @@ Flags keeps working exactly as before. Docket adds to it and changes nothing it 
 ## Works with
 
 - **flarum/tags**: rules by tag, and *View flags* per tag decides which reports a moderator sees.
-- **flarum/approval**: posts awaiting approval arrive as reports of type `approval`; approving one is logged.
+- **flarum/approval**: posts awaiting approval arrive as reports of type `approval`; approving one is logged. If it is disabled while crowd moderation has posts waiting for approval, those posts are hidden instead, so staff can still find and restore them.
 - **fof/moderator-warnings**: warn the author from the report, see their warning count, and the warning is logged on the report.
 - **flarum/suspend**: suspending the author is logged on their open reports.
 - **fof/byobu** and every other extension that limits who sees a post: a report is seen only by someone who can see its post.
@@ -74,7 +74,7 @@ composer require ernestdefoe/docket
 php flarum extension:enable ernestdefoe-docket
 ```
 
-Flags raised before Docket was installed, or while it was disabled, are filed the next time someone opens the report centre.
+Flags raised before Docket was installed, or while it was disabled, are filed when Docket is enabled, in a queued job.
 
 ## Update
 

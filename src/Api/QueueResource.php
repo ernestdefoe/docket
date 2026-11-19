@@ -4,6 +4,7 @@ namespace ErnestDefoe\Docket\Api;
 
 use Carbon\Carbon;
 use ErnestDefoe\Docket\Queue;
+use ErnestDefoe\Docket\QueueAccess;
 use ErnestDefoe\Docket\Report;
 use ErnestDefoe\Docket\Rule;
 use Flarum\Api\Context as FlarumContext;
@@ -21,6 +22,11 @@ use Tobyz\JsonApiServer\Context;
  */
 class QueueResource extends AbstractDatabaseResource
 {
+    public function __construct(
+        protected QueueAccess $access
+    ) {
+    }
+
     public function type(): string
     {
         return 'docket-queues';
@@ -37,7 +43,7 @@ class QueueResource extends AbstractDatabaseResource
 
         if (! $actor->hasPermissionLike('discussion.viewFlags') && ! $actor->isAdmin()) {
             $query->whereRaw('1 = 0');
-        } elseif ($closed = Queue::closedTo($actor)) {
+        } elseif ($closed = $this->access->closedTo($actor)) {
             $query->whereNotIn('docket_queues.id', $closed);
         }
     }
@@ -129,7 +135,7 @@ class QueueResource extends AbstractDatabaseResource
             $queue->save();
         }
 
-        Queue::forgetAccessMap();
+        $this->access->forget();
 
         return $queue;
     }
@@ -149,7 +155,7 @@ class QueueResource extends AbstractDatabaseResource
 
     public function deleted(object $model, Context $context): void
     {
-        Queue::forgetAccessMap();
+        $this->access->forget();
 
         parent::deleted($model, $context);
     }

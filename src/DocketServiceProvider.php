@@ -12,6 +12,10 @@ class DocketServiceProvider extends AbstractServiceProvider
         // itself, for the Cleared event that clearing raises.
         $this->container->singleton(Docket::class);
         $this->container->singleton(Crowd\Crowd::class);
+        // Holds the address of the request filing a flag until its entry takes it.
+        $this->container->singleton(Crowd\Address::class);
+
+        $this->container->singleton(Integrations::class);
 
         // An alt-account extension may bind its own, before or after this.
         if (! $this->container->bound(Crowd\LinkedAccounts::class)) {

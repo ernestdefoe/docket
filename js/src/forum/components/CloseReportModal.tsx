@@ -7,6 +7,7 @@ import type Mithril from 'mithril';
 import type { Report } from '../../common/models';
 import { updateReport } from '../api';
 import { t } from '../t';
+import settle from '../../common/settle';
 
 export interface CloseReportModalAttrs extends IFormModalAttrs {
   report: Report;
@@ -90,15 +91,12 @@ export default class CloseReportModal extends FormModal<CloseReportModalAttrs> {
 
     const notify = this.reporters() > 0 && this.notify();
 
-    updateReport(this.attrs.report, { status: this.attrs.status, notifyReporters: notify, outcome: notify ? this.message() : null })
-      .then(() => {
-        this.hide();
-        this.attrs.onclosed();
-      })
-      .catch(() => {})
-      .finally(() => {
-        this.loading = false;
-        m.redraw();
-      });
+    settle(updateReport(this.attrs.report, { status: this.attrs.status, notifyReporters: notify, outcome: notify ? this.message() : null }), () => {
+      this.hide();
+      this.attrs.onclosed();
+    }).finally(() => {
+      this.loading = false;
+      m.redraw();
+    });
   }
 }

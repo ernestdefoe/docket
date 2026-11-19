@@ -2,7 +2,7 @@
 
 namespace ErnestDefoe\Docket\Access;
 
-use ErnestDefoe\Docket\Queue;
+use ErnestDefoe\Docket\QueueAccess;
 use ErnestDefoe\Docket\Report;
 use Flarum\User\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -18,13 +18,18 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  */
 class ScopeFlagQueues
 {
+    public function __construct(
+        protected QueueAccess $access
+    ) {
+    }
+
     public function __invoke(User $actor, Builder $query): void
     {
         if (! $actor->hasPermissionLike('discussion.viewFlags')) {
             return;
         }
 
-        if (! $closed = Queue::closedTo($actor)) {
+        if (! $closed = $this->access->closedTo($actor)) {
             return;
         }
 

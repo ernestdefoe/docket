@@ -8,6 +8,7 @@ import saveSettings from 'flarum/admin/utils/saveSettings';
 import extractText from 'flarum/common/utils/extractText';
 import type Mithril from 'mithril';
 import { t } from '../t';
+import settle from '../../common/settle';
 
 export interface CrowdSettingsAttrs extends ComponentAttrs {
   tags: { id: string; name: string }[] | null;
@@ -15,10 +16,14 @@ export interface CrowdSettingsAttrs extends ComponentAttrs {
 
 const KEY = 'ernestdefoe-docket.crowd_';
 
-/** A setting's saved value, before any change. */
-const saved = (key: string, fallback: string) => {
+/**
+ * A setting's saved value, before any change. The admin payload carries the
+ * server's defaults, booleans as booleans: those become '1' / '0', as the
+ * switches save them, since the server would read a saved 'false' as true.
+ */
+const saved = (key: string) => {
   const value = app.data.settings[KEY + key];
-  return value === undefined || value === null ? fallback : String(value);
+  return typeof value === 'boolean' ? (value ? '1' : '0') : String(value ?? '');
 };
 
 const parse = <T,>(json: string, fallback: T): T => {
@@ -46,18 +51,18 @@ export default class CrowdSettings extends Component<CrowdSettingsAttrs> {
     super.oninit(vnode);
 
     this.values = {
-      enabled: saved('enabled', '0'),
-      action: saved('action', 'hidden'),
-      threshold: saved('threshold', '3'),
-      window: saved('window', '24'),
-      min_age: saved('min_age', '7'),
-      min_posts: saved('min_posts', '5'),
-      trust: saved('trust', '1'),
-      cooldown: saved('cooldown', '24'),
+      enabled: saved('enabled'),
+      action: saved('action'),
+      threshold: saved('threshold'),
+      window: saved('window'),
+      min_age: saved('min_age'),
+      min_posts: saved('min_posts'),
+      trust: saved('trust'),
+      cooldown: saved('cooldown'),
     };
-    this.groups = parse<number[]>(saved('groups', '[]'), []).map(String);
-    this.exempt = parse<number[]>(saved('exempt_groups', '[]'), []).map(String);
-    this.tagThresholds = Object.fromEntries(Object.entries(parse<Record<string, number>>(saved('tags', '{}'), {})).map(([id, n]) => [id, String(n)]));
+    this.groups = parse<number[]>(saved('groups'), []).map(String);
+    this.exempt = parse<number[]>(saved('exempt_groups'), []).map(String);
+    this.tagThresholds = Object.fromEntries(Object.entries(parse<Record<string, number>>(saved('tags'), {})).map(([id, n]) => [id, String(n)]));
   }
 
   view() {
@@ -74,97 +79,123 @@ export default class CrowdSettings extends Component<CrowdSettingsAttrs> {
             {t('crowd.enabled')}
           </Switch>
 
-          <fieldset className="DocketCrowdSettings-group" disabled={!on}>
-            <legend>{t('crowd.when')}</legend>
-            {this.number('threshold', 2, 1000)}
-            {this.number('window', 1, 720)}
-            <div className="Form-group">
-              <label for="docket-crowd-action">{t('crowd.action')}</label>
-              <Select
-                id="docket-crowd-action"
-                value={approval ? this.values.action : 'hidden'}
-                options={{
-                  hidden: extractText(t('crowd.action_hidden')),
-                  ...(approval ? { approval: extractText(t('crowd.action_approval')) } : {}),
-                }}
-                onchange={(value: string) => this.set('action', value)}
-              />
-              <p className="helpText">{t('crowd.action_help')}</p>
-            </div>
-          </fieldset>
+          {this.whenFields(on, approval)}
 
-          <fieldset className="DocketCrowdSettings-group" disabled={!on}>
-            <legend>{t('crowd.who')}</legend>
-            {this.number('min_age', 0, 3650)}
-            {this.number('min_posts', 0, 100000)}
-            <div className="Form-group">
-              <label>{t('crowd.groups')}</label>
-              <GroupSelector
-                multiple
-                value={this.groups}
-                exclude={['2']}
-                onchange={(ids: string[]) => ((this.groups = ids), (this.dirty = true))}
-                aria-label={t('crowd.groups')}
-              />
-              <p className="helpText">{t('crowd.groups_help')}</p>
-            </div>
-            <Switch
-              state={this.values.trust === '1' || this.values.trust === 'true'}
-              onchange={(value: boolean) => this.set('trust', value ? '1' : '0')}
-            >
-              {t('crowd.trust')}
-            </Switch>
-            <p className="helpText">{t('crowd.trust_help')}</p>
-            <p className="helpText">{t('crowd.address_help')}</p>
-          </fieldset>
+          {this.whoFields(on)}
 
-          <fieldset className="DocketCrowdSettings-group" disabled={!on}>
-            <legend>{t('crowd.never')}</legend>
-            <div className="Form-group">
-              <label>{t('crowd.exempt')}</label>
-              <GroupSelector
-                multiple
-                value={this.exempt}
-                exclude={['2']}
-                onchange={(ids: string[]) => ((this.exempt = ids), (this.dirty = true))}
-                aria-label={t('crowd.exempt')}
-              />
-              <p className="helpText">{t('crowd.exempt_help')}</p>
-            </div>
-            {this.number('cooldown', 0, 8760)}
-          </fieldset>
+          {this.neverFields(on)}
 
-          {this.attrs.tags && this.attrs.tags.length ? (
-            <fieldset className="DocketCrowdSettings-group" disabled={!on}>
-              <legend>{t('crowd.tags')}</legend>
-              <p className="helpText">{t('crowd.tags_help')}</p>
-              <div className="DocketCrowdSettings-tags">
-                {this.attrs.tags.map((tag) => (
-                  <label className="DocketCrowdSettings-tag">
-                    <span>{tag.name}</span>
-                    <input
-                      className="FormControl"
-                      type="number"
-                      min={0}
-                      max={1000}
-                      placeholder={this.values.threshold}
-                      value={this.tagThresholds[tag.id] ?? ''}
-                      oninput={(e: InputEvent) => {
-                        this.tagThresholds[tag.id] = (e.target as HTMLInputElement).value;
-                        this.dirty = true;
-                      }}
-                    />
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          ) : null}
+          {this.tagFields(on)}
 
           <Button className="Button Button--primary" loading={this.saving} disabled={!this.dirty} onclick={() => this.save()}>
             {t('crowd.save')}
           </Button>
         </div>
       </section>
+    );
+  }
+
+  /** How much it takes, and what happens to the post. */
+  whenFields(on: boolean, approval: boolean) {
+    return (
+      <fieldset className="DocketCrowdSettings-group" disabled={!on}>
+        <legend>{t('crowd.when')}</legend>
+        {this.number('threshold', 2, 1000)}
+        {this.number('window', 1, 720)}
+        <div className="Form-group">
+          <label for="docket-crowd-action">{t('crowd.action')}</label>
+          <Select
+            id="docket-crowd-action"
+            value={approval ? this.values.action : 'hidden'}
+            options={{
+              hidden: extractText(t('crowd.action_hidden')),
+              ...(approval ? { approval: extractText(t('crowd.action_approval')) } : {}),
+            }}
+            onchange={(value: string) => this.set('action', value)}
+          />
+          <p className="helpText">{t('crowd.action_help')}</p>
+        </div>
+      </fieldset>
+    );
+  }
+
+  /** Whose reports count, and for how much. */
+  whoFields(on: boolean) {
+    return (
+      <fieldset className="DocketCrowdSettings-group" disabled={!on}>
+        <legend>{t('crowd.who')}</legend>
+        {this.number('min_age', 0, 3650)}
+        {this.number('min_posts', 0, 100000)}
+        <div className="Form-group">
+          <label>{t('crowd.groups')}</label>
+          <GroupSelector
+            multiple
+            value={this.groups}
+            exclude={['2']}
+            onchange={(ids: string[]) => ((this.groups = ids), (this.dirty = true))}
+            aria-label={t('crowd.groups')}
+          />
+          <p className="helpText">{t('crowd.groups_help')}</p>
+        </div>
+        <Switch state={this.values.trust === '1' || this.values.trust === 'true'} onchange={(value: boolean) => this.set('trust', value ? '1' : '0')}>
+          {t('crowd.trust')}
+        </Switch>
+        <p className="helpText">{t('crowd.trust_help')}</p>
+        <p className="helpText">{t('crowd.address_help')}</p>
+      </fieldset>
+    );
+  }
+
+  /** Posts the crowd never acts on. */
+  neverFields(on: boolean) {
+    return (
+      <fieldset className="DocketCrowdSettings-group" disabled={!on}>
+        <legend>{t('crowd.never')}</legend>
+        <div className="Form-group">
+          <label>{t('crowd.exempt')}</label>
+          <GroupSelector
+            multiple
+            value={this.exempt}
+            exclude={['2']}
+            onchange={(ids: string[]) => ((this.exempt = ids), (this.dirty = true))}
+            aria-label={t('crowd.exempt')}
+          />
+          <p className="helpText">{t('crowd.exempt_help')}</p>
+        </div>
+        {this.number('cooldown', 0, 8760)}
+      </fieldset>
+    );
+  }
+
+  /** A threshold of its own for each tag, or none. */
+  tagFields(on: boolean) {
+    const tags = this.attrs.tags;
+    if (!tags || !tags.length) return null;
+
+    return (
+      <fieldset className="DocketCrowdSettings-group" disabled={!on}>
+        <legend>{t('crowd.tags')}</legend>
+        <p className="helpText">{t('crowd.tags_help')}</p>
+        <div className="DocketCrowdSettings-tags">
+          {tags.map((tag) => (
+            <label className="DocketCrowdSettings-tag">
+              <span>{tag.name}</span>
+              <input
+                className="FormControl"
+                type="number"
+                min={0}
+                max={1000}
+                placeholder={this.values.threshold}
+                value={this.tagThresholds[tag.id] ?? ''}
+                oninput={(e: InputEvent) => {
+                  this.tagThresholds[tag.id] = (e.target as HTMLInputElement).value;
+                  this.dirty = true;
+                }}
+              />
+            </label>
+          ))}
+        </div>
+      </fieldset>
     );
   }
 
@@ -206,17 +237,12 @@ export default class CrowdSettings extends Component<CrowdSettingsAttrs> {
     settings[KEY + 'tags'] = JSON.stringify(tags);
 
     this.saving = true;
-    saveSettings(settings)
-      .then(() => {
-        this.dirty = false;
-        app.alerts.show({ type: 'success' }, t('crowd.saved'));
-      })
-      // app.request has already shown the error alert; this only stops the
-      // rethrown rejection going unhandled. The form stays dirty.
-      .catch(() => {})
-      .finally(() => {
-        this.saving = false;
-        m.redraw();
-      });
+    settle(saveSettings(settings), () => {
+      this.dirty = false;
+      app.alerts.show({ type: 'success' }, t('crowd.saved'));
+    }).finally(() => {
+      this.saving = false;
+      m.redraw();
+    });
   }
 }
