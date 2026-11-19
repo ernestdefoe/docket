@@ -321,6 +321,13 @@ class ReportResource extends AbstractDatabaseResource
             $this->checkAssignee($report, $changes['assignee'], $actor, $active, $othersMay);
         }
 
+        if (isset($changes['status']) && $changes['status'] !== $report->status && ! $report->isActive() && ! $active) {
+            // A closed report is reopened before its verdict changes: closing
+            // it again would skip what closing checks (who may restore the
+            // post) and tell its reporters twice.
+            $this->fail('status', 'closed');
+        }
+
         if (isset($changes['status']) && $changes['status'] !== $report->status && $report->isActive() && $active && $takesFromOther && ! $othersMay && ! array_key_exists('assignee', $changes)) {
             // Moving between open and in progress hands the report to you or
             // to no one, which is taking it from its holder.

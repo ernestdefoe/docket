@@ -21,6 +21,9 @@ class FilingTest extends DocketTestCase
         $this->assertSame('open', $reports[0]->status);
         $this->assertSame(2, (int) $reports[0]->entry_count);
         $this->assertSame(self::AUTHOR, (int) $reports[0]->user_id);
+        // Kept for other extensions (Member Desk), for when the post is gone.
+        $this->assertSame(1, (int) $reports[0]->discussion_id);
+        $this->assertSame('General chat', \ErnestDefoe\Docket\Report::query()->with('discussion')->findOrFail($reports[0]->id)->discussion?->title);
 
         $entries = $this->database()->table('docket_entries')->orderBy('id')->get();
         $this->assertSame(['spam', 'other'], $entries->pluck('reason')->all());

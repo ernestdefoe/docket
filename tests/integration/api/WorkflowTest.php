@@ -42,6 +42,19 @@ class WorkflowTest extends DocketTestCase
     }
 
     #[Test]
+    public function a_closed_report_is_reopened_before_its_verdict_changes(): void
+    {
+        $this->flag(1, self::REPORTER);
+        $id = $this->reportId(1);
+        $this->assertSame(200, $this->updateReport($id, self::MOD, ['status' => 'resolved'])->getStatusCode());
+
+        $response = $this->updateReport($id, self::MOD, ['status' => 'rejected']);
+        $this->assertSame(422, $response->getStatusCode());
+        $this->assertSame('resolved', $this->row($id)->status);
+        $this->assertSame(1, $this->database()->table('docket_events')->where('report_id', $id)->where('type', 'status')->count(), 'closed once');
+    }
+
+    #[Test]
     public function a_report_someone_else_is_changing_this_moment_is_left_alone(): void
     {
         $this->flag(1, self::REPORTER);

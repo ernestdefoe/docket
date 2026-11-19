@@ -37,7 +37,7 @@ class ReporterTest extends DocketTestCase
 
         foreach ($reports as $id => [$days, $post, $status, $state]) {
             $at = $now->copy()->subDays($days);
-            $rows['docket_reports'][] = ['id' => $id, 'post_id' => $post, 'discussion_id' => $post, 'user_id' => self::AUTHOR, 'status' => $status, 'crowd_state' => $state, 'entry_count' => 1, 'created_at' => $at, 'updated_at' => $at];
+            $rows['docket_reports'][] = ['id' => $id, 'post_id' => $post, 'user_id' => self::AUTHOR, 'status' => $status, 'crowd_state' => $state, 'entry_count' => 1, 'created_at' => $at, 'updated_at' => $at];
             $rows['docket_entries'][] = [
                 'id' => $id, 'report_id' => $id, 'post_id' => $post,
                 'user_id' => $id === 111 ? self::OTHER : self::REPORTER,

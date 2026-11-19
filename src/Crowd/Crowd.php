@@ -24,7 +24,7 @@ use Illuminate\Contracts\Events\Dispatcher;
  * to count; reports from one address, or from accounts an alt-account
  * extension links, count once; and with trust on, each person counts by how
  * often their past reports were upheld. Everything is decided here, on the
- * server, with the post's row locked, so a burst of reports acts once.
+ * server, under the post's lock, so a burst of reports acts once.
  */
 class Crowd
 {
@@ -63,7 +63,7 @@ class Crowd
     }
 
     /**
-     * After a member's flag is filed, with the post's row locked: hide the
+     * After a member's flag is filed, under the post's lock: hide the
      * post when its reports now weigh enough. Acts once per report.
      */
     public function consider(Report $report, Post $post): void

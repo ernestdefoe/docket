@@ -20,7 +20,7 @@ class ApprovalGoneTest extends DocketTestCase
         $now = Carbon::now();
 
         $rows['posts'][] = ['id' => 6, 'discussion_id' => 1, 'user_id' => self::AUTHOR, 'type' => 'comment', 'content' => '<t><p>Post 6</p></t>', 'number' => 3, 'created_at' => $now, 'is_approved' => 0, 'is_private' => 1];
-        $rows['docket_reports'][] = ['id' => 1, 'post_id' => 6, 'discussion_id' => 1, 'user_id' => self::AUTHOR, 'status' => 'open', 'entry_count' => 3, 'crowd_state' => 'approval', 'crowd_at' => $now, 'created_at' => $now, 'updated_at' => $now];
+        $rows['docket_reports'][] = ['id' => 1, 'post_id' => 6, 'user_id' => self::AUTHOR, 'status' => 'open', 'entry_count' => 3, 'crowd_state' => 'approval', 'crowd_at' => $now, 'created_at' => $now, 'updated_at' => $now];
 
         return $rows;
     }

@@ -76,8 +76,8 @@ class Docket
 
         // Two flags on one post at the same moment must land in one report.
         // A cache lock per post holds on every database (SQLite has no row
-        // locks); the post row is locked too, for a store without locks. A
-        // flag that finds the lock taken is filed by a queued job, which
+        // locks), and every Laravel cache store can lock. A flag that finds
+        // the lock taken is filed by a queued job, which
         // waits for it. On Flarum's default sync queue that job runs within
         // the request, which then waits as long as the other flag takes to
         // file (milliseconds), and at most 5 seconds: after that the flag is
@@ -107,9 +107,8 @@ class Docket
 
     protected function fileLocked(Flag $flag, bool $notify, ?string $ipHash): void
     {
-        // file() holds the post's cache lock; the row lock is for a cache
-        // store without locks, on databases that have them.
-        $post = Post::query()->whereKey($flag->post_id)->lockForUpdate()->first();
+        // file() holds the post's cache lock while this runs.
+        $post = Post::query()->whereKey($flag->post_id)->first();
 
         if (! $post) {
             return;
@@ -141,7 +140,7 @@ class Docket
             $this->route($report, $flag, $post, $notify);
         }
 
-        // Still holding the post's row: of several reports at once, one acts.
+        // Still holding the post's lock: of several reports at once, one acts.
         if ($entry->type === 'user') {
             $this->crowd->consider($report, $post);
         }

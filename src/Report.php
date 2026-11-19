@@ -5,6 +5,7 @@ namespace ErnestDefoe\Docket;
 use Carbon\Carbon;
 use Flarum\Database\AbstractModel;
 use Flarum\Database\ScopeVisibilityTrait;
+use Flarum\Discussion\Discussion;
 use Flarum\Post\Post;
 use Flarum\User\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,8 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property int $id
  * @property int|null $post_id
- * @property int|null $active_post_id
  * @property int|null $discussion_id
+ * @property int|null $active_post_id
  * @property int|null $user_id
  * @property int|null $queue_id
  * @property int|null $assignee_id
@@ -29,6 +30,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Post|null $post
+ * @property-read Discussion|null $discussion
  * @property-read User|null $user
  * @property-read Queue|null $queue
  * @property-read User|null $assignee
@@ -106,6 +108,16 @@ class Report extends AbstractModel
     public function post(): BelongsTo
     {
         return $this->belongsTo(Post::class);
+    }
+
+    /**
+     * The post's discussion when the report was filed, kept after the post
+     * is gone. Read by other extensions (Member Desk names it beside a
+     * member's reports when the post was deleted).
+     */
+    public function discussion(): BelongsTo
+    {
+        return $this->belongsTo(Discussion::class);
     }
 
     public function user(): BelongsTo
