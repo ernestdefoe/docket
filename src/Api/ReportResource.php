@@ -97,7 +97,8 @@ class ReportResource extends AbstractDatabaseResource
                 ]),
             Endpoint\Update::make()
                 ->authenticated()
-                ->defaultInclude(['assignee', 'queue', 'closedBy', 'events', 'events.user']),
+                // The page loads the report again for its timeline, capped as Show caps it.
+                ->defaultInclude(['assignee', 'queue', 'closedBy']),
         ];
     }
 
@@ -317,20 +318,7 @@ class ReportResource extends AbstractDatabaseResource
         $takesFromOther = $holder && $holder !== $actor->id;
 
         if (array_key_exists('assignee', $changes)) {
-            /** @var User|null $to */
-            $to = $changes['assignee'];
-
-            if (! $report->isActive() || ! $active) {
-                $this->fail('assignee', 'closed');
-            }
-
-            if ($to?->id !== $holder && ((($to && $to->id !== $actor->id) || $takesFromOther) && ! $othersMay)) {
-                $this->fail('assignee', 'assign_others');
-            }
-
-            if ($to && $to->id !== $actor->id && ! $this->docket->canSee($to, $report)) {
-                $this->fail('assignee', 'cannot_see');
-            }
+            $this->checkAssignee($report, $changes['assignee'], $actor, $active, $othersMay);
         }
 
         if (isset($changes['status']) && $changes['status'] !== $report->status && $report->isActive() && $active && $takesFromOther && ! $othersMay && ! array_key_exists('assignee', $changes)) {
@@ -348,8 +336,32 @@ class ReportResource extends AbstractDatabaseResource
             $this->fail('status', 'cannot_restore');
         }
 
+        if ($active && ! $report->isActive() && $report->post_id && $this->docket->activeReport($report->post_id)) {
+            // The post has a newer open report: that one is where to work.
+            $this->fail('status', 'reopen_active');
+        }
+
         if (array_key_exists('queue', $changes) && ! $report->isActive()) {
             $this->fail('queue', 'closed');
+        }
+    }
+
+    /** Who the report may go to, and whether this actor may hand it over. */
+    protected function checkAssignee(Report $report, ?User $to, User $actor, bool $active, bool $othersMay): void
+    {
+        $holder = $report->assignee_id;
+        $takesFromOther = $holder && $holder !== $actor->id;
+
+        if (! $report->isActive() || ! $active) {
+            $this->fail('assignee', 'closed');
+        }
+
+        if ($to?->id !== $holder && ((($to && $to->id !== $actor->id) || $takesFromOther) && ! $othersMay)) {
+            $this->fail('assignee', 'assign_others');
+        }
+
+        if ($to && $to->id !== $actor->id && ! $this->docket->canSee($to, $report)) {
+            $this->fail('assignee', 'cannot_see');
         }
     }
 

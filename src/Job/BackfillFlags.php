@@ -117,6 +117,7 @@ class BackfillFlags extends AbstractJob
             'discussion_id' => $post->discussion_id,
             'user_id' => $post->user_id,
             'status' => Report::OPEN,
+            'active_post_id' => $post->id,
             'entry_count' => 0,
             'created_at' => $now,
             'updated_at' => $now,

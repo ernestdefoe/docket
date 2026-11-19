@@ -7,8 +7,8 @@ use ErnestDefoe\Docket\Crowd\Address;
 use ErnestDefoe\Docket\Crowd\Crowd;
 use ErnestDefoe\Docket\Integration\Tags;
 use ErnestDefoe\Docket\Job\FileFlag;
+use ErnestDefoe\Docket\Job\TellReporters;
 use ErnestDefoe\Docket\Notification\ReportAssignedBlueprint;
-use ErnestDefoe\Docket\Notification\ReportOutcomeBlueprint;
 use Flarum\Flags\Command\DeleteFlags;
 use Flarum\Flags\Flag;
 use Flarum\Notification\Blueprint\BlueprintInterface;
@@ -21,6 +21,7 @@ use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Contracts\Queue\Queue as JobQueue;
+use Illuminate\Database\UniqueConstraintViolationException;
 use WeakMap;
 
 /**
@@ -80,7 +81,8 @@ class Docket
         // waits for it. On Flarum's default sync queue that job runs within
         // the request, which then waits as long as the other flag takes to
         // file (milliseconds), and at most 5 seconds: after that the flag is
-        // filed under the row lock alone.
+        // filed without it. Either way the database keeps the post to one
+        // open report (openReport).
         $store = $this->cache->getStore();
         $file = fn () => Post::query()->getConnection()->transaction(fn () => $this->fileLocked($flag, $notify, $ipHash));
 
@@ -113,19 +115,10 @@ class Docket
             return;
         }
 
-        $report = $this->activeReport($post->id);
+        $report = $this->activeReport($post->id) ?? $this->openReport($post);
         $now = Carbon::now();
 
-        if (! $report) {
-            $report = new Report();
-            $report->post_id = $post->id;
-            $report->discussion_id = $post->discussion_id;
-            $report->user_id = $post->user_id;
-            $report->status = Report::OPEN;
-        }
-
         $report->entry_count++;
-        $report->updated_at = $now;
         $report->save();
 
         $entry = new Entry();
@@ -151,6 +144,29 @@ class Docket
         // Still holding the post's row: of several reports at once, one acts.
         if ($entry->type === 'user') {
             $this->crowd->consider($report, $post);
+        }
+    }
+
+    /**
+     * A new report on the post, or the one another flag opened a moment ago:
+     * the unique active_post_id lets only one be open. In a savepoint, so
+     * the clash leaves the transaction usable on PostgreSQL.
+     */
+    protected function openReport(Post $post): Report
+    {
+        $report = new Report();
+        $report->post_id = $post->id;
+        $report->discussion_id = $post->discussion_id;
+        $report->user_id = $post->user_id;
+        $report->status = Report::OPEN;
+        $report->entry_count = 0;
+
+        try {
+            $post->getConnection()->transaction(fn () => $report->save());
+
+            return $report;
+        } catch (UniqueConstraintViolationException $e) {
+            return $this->activeReport($post->id) ?? throw $e;
         }
     }
 
@@ -310,7 +326,6 @@ class Docket
             $report->status = $to ? Report::IN_PROGRESS : Report::OPEN;
         }
 
-        $report->updated_at = Carbon::now();
         $report->save();
         $report->setRelation('assignee', $to);
 
@@ -333,7 +348,6 @@ class Docket
 
         $from = $report->queue;
         $report->queue_id = $queue?->id;
-        $report->updated_at = Carbon::now();
         $report->save();
         $report->setRelation('queue', $queue);
 
@@ -356,7 +370,6 @@ class Docket
         $report->closed_by_id = $by->id;
         $report->outcome = $message;
         $report->reporters_notified = $notify;
-        $report->updated_at = $now;
         $report->save();
 
         $report->log('status', $by, ['from' => $from, 'to' => $status, 'notified' => $notify], $message);
@@ -392,27 +405,15 @@ class Docket
             $report->assignee_id = $by->id;
         }
 
-        $report->updated_at = Carbon::now();
         $report->save();
 
         $report->log('status', $by, ['from' => $from, 'to' => $status]);
     }
 
+    /** Queued once the close is committed: nobody is told about a change that was rolled back. */
     protected function tellReporters(Report $report, string $status, ?string $message, User $by): void
     {
-        $entries = $report->entries()
-            ->whereNotNull('user_id')
-            ->where('user_id', '!=', $by->id)
-            ->with('user')
-            ->orderBy('id')
-            ->get()
-            ->unique('user_id');
-
-        foreach ($entries as $entry) {
-            if ($entry->user) {
-                $this->send(new ReportOutcomeBlueprint($entry, $status, $message), $entry->user);
-            }
-        }
+        Report::query()->getConnection()->afterCommit(fn () => $this->jobs->push(new TellReporters($report, $status, $message, $by->id)));
     }
 
     /**
@@ -448,7 +449,6 @@ class Docket
             $report->status = $acted ? Report::RESOLVED : Report::REJECTED;
             $report->closed_at = $now;
             $report->closed_by_id = $actor?->id;
-            $report->updated_at = $now;
             $report->save();
 
             $report->log('cleared', $actor, ['to' => $report->status]);
@@ -487,8 +487,8 @@ class Docket
             $report->status = Report::RESOLVED;
         }
 
-        $report->updated_at = Carbon::now();
-        $report->save();
+        // Moved up the list even when only a line was logged.
+        $report->touch();
 
         // Staff put back by hand what the crowd hid.
         $undoes = ['post_restored' => Crowd::HIDDEN, 'post_approved' => Crowd::APPROVAL];
@@ -506,12 +506,21 @@ class Docket
      */
     public function userAction(int $userId, string $type, ?User $actor, ?array $data = null): void
     {
-        Report::query()
+        $ids = Report::query()
             ->where('user_id', $userId)
             ->whereIn('status', Report::ACTIVE)
             ->orderByDesc('id')
             ->limit(50)
-            ->get()
-            ->each(fn (Report $report) => $report->log($type, $actor, $data));
+            ->pluck('id');
+
+        // One insert for all of them; data as the model's array cast stores it.
+        $now = Carbon::now();
+        ReportEvent::query()->insert($ids->map(fn ($id) => [
+            'report_id' => (int) $id,
+            'user_id' => $actor?->id,
+            'type' => $type,
+            'data' => $data === null ? null : json_encode($data),
+            'created_at' => $now,
+        ])->all());
     }
 }

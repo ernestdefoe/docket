@@ -324,7 +324,6 @@ class Crowd
     {
         $report->crowd_state = $state;
         $report->crowd_at = Carbon::now();
-        $report->updated_at = $report->crowd_at;
         $report->save();
 
         $report->log($event, $actor, $data);

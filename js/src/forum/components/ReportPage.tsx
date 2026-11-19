@@ -43,8 +43,11 @@ export default class ReportPage extends Page {
   note = Stream('');
   saving = false;
   busy = false;
-  /** A moderation control opened a modal (Edit, Warn): reload once it closes. */
-  watchModal: 'none' | 'open' = 'none';
+  /** The post as last loaded: when it changes (hidden, restored, deleted), the report is loaded again. */
+  postStamp: number | null = null;
+  /** A modal was open (Edit, Warn): reload once it closes. */
+  modalWasOpen = false;
+  loading = false;
 
   oninit(vnode: Mithril.Vnode) {
     super.oninit(vnode);
@@ -63,22 +66,35 @@ export default class ReportPage extends Page {
   onupdate(vnode: Mithril.VnodeDOM) {
     super.onupdate(vnode);
 
-    if (this.watchModal === 'open' && !this.modalOpening()) {
-      this.watchModal = 'none';
-      this.load();
-    }
+    // Show what the moderation controls did once they have done it: the
+    // post they change is pushed to the store again, and the ones that open
+    // a modal are done when it closes.
+    const modalOpen = app.modal.isModalOpen();
+    const closed = this.modalWasOpen && !modalOpen;
+    this.modalWasOpen = modalOpen;
+
+    if (this.report && !this.loading && (closed || this.stamp() !== this.postStamp)) this.load();
   }
 
-  modalOpening() {
-    return app.modal.isModalOpen() || app.modal.loadingModal || app.modal.backdropShown;
+  /** When the post was last pushed to the store; -1 once it is deleted. */
+  stamp(): number | null {
+    const post = this.report?.post() || null;
+    return post ? (post.exists ? post.freshness.getTime() : -1) : null;
   }
 
   load() {
+    this.loading = true;
+
     return settle(app.store.find<Report>('docket-reports', m.route.param('id')), (report) => {
       this.report = report;
       this.records = (report as any).payload?.meta?.reporterStats || {};
       app.setTitle(extractText(t('report.title', { id: report.id() })));
-    }).finally(() => m.redraw());
+    }).finally(() => {
+      // Also when it failed: the alert is shown once, not on every redraw.
+      this.postStamp = this.stamp();
+      this.loading = false;
+      m.redraw();
+    });
   }
 
   view() {
@@ -177,8 +193,7 @@ export default class ReportPage extends Page {
 
   /** A report's flags were dismissed with it: the flags dropdown and its count are out of date. */
   dropFlagCounts() {
-    const flags = (app as any).flags;
-    if (flags) flags.cache = null;
+    (app as any).flags?.clear();
     const count = app.session.user?.attribute<number>('newFlagCount');
     if (count) app.session.user!.pushAttributes({ newFlagCount: count - 1 });
     const total = app.forum.attribute<number>('flagCount');
@@ -191,19 +206,6 @@ export default class ReportPage extends Page {
 
     // Hide, delete, edit, and fof/moderator-warnings' Warn, as on the post.
     const controls = [...PostControls.moderationControls(post, this).toArray(), ...PostControls.destructiveControls(post, this).toArray()];
-    controls.forEach((item: any) => {
-      const original = item?.attrs?.onclick;
-      if (!original) return;
-      item.attrs.onclick = (e: MouseEvent) => {
-        const result = original(e);
-        // Show what was done once it has been: when the action opened a
-        // modal (Edit, Warn), after the modal closes; otherwise when it
-        // finishes.
-        if (this.modalOpening()) this.watchModal = 'open';
-        else Promise.resolve(result).finally(() => setTimeout(() => this.load(), 300));
-        return result;
-      };
-    });
 
     return (
       <div className={'DocketCard DocketPost' + (post.isHidden() ? ' DocketPost--hidden' : '')}>

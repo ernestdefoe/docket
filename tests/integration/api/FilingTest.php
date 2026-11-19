@@ -93,6 +93,32 @@ class FilingTest extends DocketTestCase
     }
 
     #[Test]
+    public function the_database_keeps_a_post_to_one_open_report(): void
+    {
+        $this->flag(1, self::REPORTER);
+        $id = $this->reportId(1);
+
+        // Another flag found no report and opened one: the database refuses
+        // the second, and the flag joins the first.
+        $docket = $this->app()->getContainer()->make(\ErnestDefoe\Docket\Docket::class);
+        $post = \Flarum\Post\Post::query()->findOrFail(1);
+        $open = (new \ReflectionMethod($docket, 'openReport'))->invoke($docket, $post);
+
+        $this->assertSame($id, $open->id);
+        $this->assertSame(1, $this->database()->table('docket_reports')->where('post_id', 1)->count());
+
+        // Once it closes, a new one may open; the old one can't be reopened
+        // beside it.
+        $this->assertSame(200, $this->updateReport($id, self::MOD, ['status' => 'resolved'])->getStatusCode());
+        $this->flag(1, self::OTHER);
+        $this->assertSame(2, $this->database()->table('docket_reports')->where('post_id', 1)->count());
+
+        $response = $this->updateReport($id, self::MOD, ['status' => 'open']);
+        $this->assertSame(422, $response->getStatusCode());
+        $this->assertStringContainsString('reopen_active', (string) $response->getBody());
+    }
+
+    #[Test]
     public function dismissing_flags_the_flarum_way_closes_the_report(): void
     {
         $this->flag(1, self::REPORTER);

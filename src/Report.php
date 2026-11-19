@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property int $id
  * @property int|null $post_id
+ * @property int|null $active_post_id
  * @property int|null $discussion_id
  * @property int|null $user_id
  * @property int|null $queue_id
@@ -48,6 +49,17 @@ class Report extends AbstractModel
     public const ACTIVE = [self::OPEN, self::IN_PROGRESS];
 
     public const STATUSES = [self::OPEN, self::IN_PROGRESS, self::RESOLVED, self::REJECTED];
+
+    /**
+     * The post's id while the report is open or in progress, under a unique
+     * index: the database itself keeps a post to one open report.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $report) {
+            $report->active_post_id = $report->isActive() ? $report->post_id : null;
+        });
+    }
 
     /**
      * How a closed report counts for its reporters, as SQL over the reports

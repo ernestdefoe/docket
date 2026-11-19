@@ -5,6 +5,7 @@ ernestdefoe-docket:
     cannot_see: That member can't see this report, so it can't be assigned to them.
     cannot_restore: Rejecting this report puts the post back, and you don't have permission to restore it.
     busy: Someone else is changing this report right now. Try again in a moment.
+    reopen_active: This post has a newer open report. Work on that one instead.
 
   email:
     assigned:
