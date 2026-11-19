@@ -82,6 +82,37 @@ class FilingTest extends DocketTestCase
     }
 
     #[Test]
+    public function the_upgrade_merges_open_reports_a_post_already_had_into_the_newest(): void
+    {
+        $now = \Carbon\Carbon::now();
+        $report = fn (int $id, string $status) => ['id' => $id, 'post_id' => 1, 'discussion_id' => 1, 'user_id' => self::AUTHOR, 'status' => $status, 'entry_count' => 1, 'created_at' => $now, 'updated_at' => $now];
+        // As a forum has them before 2026_11_19_000002: no active_post_id.
+        $this->database()->table('docket_reports')->insert([$report(11, 'resolved'), $report(12, 'open'), $report(13, 'in_progress'), $report(14, 'open')]);
+        foreach ([11, 12, 13, 14] as $id) {
+            $this->database()->table('docket_entries')->insert(['report_id' => $id, 'post_id' => 1, 'user_id' => self::REPORTER, 'type' => 'user', 'reason' => 'spam', 'created_at' => $now]);
+        }
+
+        \ErnestDefoe\Docket\Migration\OneOpenReportPerPost::run($this->database());
+
+        $rows = $this->database()->table('docket_reports')->orderBy('id')->get()->keyBy('id');
+        $this->assertSame('resolved', $rows[11]->status, 'closed reports are left alone');
+        $this->assertNull($rows[11]->active_post_id);
+        $this->assertSame(['resolved', 'resolved'], [$rows[12]->status, $rows[13]->status]);
+        $this->assertSame('open', $rows[14]->status);
+        $this->assertSame(1, (int) $rows[14]->active_post_id);
+        $this->assertSame(3, (int) $rows[14]->entry_count, 'its own entry and the two it took');
+        $this->assertSame(1, $this->database()->table('docket_entries')->where('report_id', 11)->count());
+        $this->assertSame(
+            ['{"into":14}', '{"into":14}'],
+            $this->database()->table('docket_events')->whereIn('report_id', [12, 13])->where('type', 'merged')->pluck('data')->all()
+        );
+
+        // And the post now takes no second open report.
+        $this->assertSame(201, $this->flag(1, self::OTHER)->getStatusCode());
+        $this->assertSame(14, $this->reportId(1));
+    }
+
+    #[Test]
     public function a_flag_after_a_report_closes_opens_a_new_one(): void
     {
         $this->flag(1, self::REPORTER);

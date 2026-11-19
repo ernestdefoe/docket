@@ -81,6 +81,8 @@ export function eventText(event: ReportEvent): Mithril.Children {
       });
     case 'crowd_held':
       return t(`timeline.crowd_held_${data.why}`, { people: data.people });
+    case 'merged':
+      return t('timeline.merged', { id: data.into });
     case 'crowd_moved':
       return t('timeline.crowd_moved');
     case 'crowd_restored':
