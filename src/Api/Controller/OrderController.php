@@ -14,6 +14,9 @@ use Psr\Http\Server\RequestHandlerInterface;
 
 /**
  * Saves a drag-and-drop order of queues or rules: the ids, first to last.
+ *
+ * A handler, not a JSON:API endpoint: it changes many records at once in one
+ * statement, which a resource's update of one record at a time would not.
  */
 class OrderController implements RequestHandlerInterface
 {
@@ -38,11 +41,16 @@ class OrderController implements RequestHandlerInterface
             return new EmptyResponse(422);
         }
 
-        $this->db->transaction(function () use ($model, $ids) {
-            foreach (array_values(array_slice($ids, 0, 500)) as $position => $id) {
-                $model::query()->whereKey((int) $id)->update(['position' => $position]);
-            }
-        });
+        $ids = array_values(array_unique(array_map('intval', array_filter(array_slice($ids, 0, 500), 'is_numeric'))));
+
+        if ($ids) {
+            // One statement: every id and position is an integer, so they
+            // are written in.
+            $column = $this->db->getQueryGrammar()->wrap('id');
+            $cases = implode(' ', array_map(fn (int $id, int $position) => "when $id then $position", $ids, array_keys($ids)));
+
+            $model::query()->whereIn('id', $ids)->update(['position' => $this->db->raw("case $column $cases end")]);
+        }
 
         return new EmptyResponse(204);
     }

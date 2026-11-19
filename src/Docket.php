@@ -17,7 +17,9 @@ use Flarum\User\Exception\PermissionDeniedException;
 use Flarum\User\User;
 use Illuminate\Contracts\Bus\Dispatcher as Bus;
 use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Contracts\Queue\Queue as JobQueue;
 use WeakMap;
 
 /**
@@ -49,7 +51,8 @@ class Docket
         protected Crowd $crowd,
         protected Address $address,
         protected Cache $cache,
-        protected QueueAccess $access
+        protected QueueAccess $access,
+        protected JobQueue $jobs
     ) {
         $this->mayDismiss = new WeakMap();
     }
@@ -72,8 +75,11 @@ class Docket
         // Two flags on one post at the same moment must land in one report.
         // A cache lock per post holds on every database (SQLite has no row
         // locks); the post row is locked too, for a store without locks. A
-        // request never waits for it: a flag that finds it taken is filed by
-        // a queued job, which may.
+        // flag that finds the lock taken is filed by a queued job, which
+        // waits for it. On Flarum's default sync queue that job runs within
+        // the request, which then waits as long as the other flag takes to
+        // file (milliseconds), and at most 5 seconds: after that the flag is
+        // filed under the row lock alone.
         $store = $this->cache->getStore();
         $file = fn () => Post::query()->getConnection()->transaction(fn () => $this->fileLocked($flag, $notify, $ipHash));
 
@@ -86,14 +92,20 @@ class Docket
         $lock = $store->lock("ernestdefoe-docket.file.$flag->post_id", 30);
 
         if ($wait) {
-            $lock->block(30, $file);
+            try {
+                $lock->block(5, $file);
+            } catch (LockTimeoutException) {
+                $file();
+            }
         } elseif ($lock->get($file) === false) {
-            $this->bus->dispatch(new FileFlag($flag, $notify, $ipHash));
+            $this->jobs->push(new FileFlag($flag, $notify, $ipHash));
         }
     }
 
     protected function fileLocked(Flag $flag, bool $notify, ?string $ipHash): void
     {
+        // file() holds the post's cache lock; the row lock is for a cache
+        // store without locks, on databases that have them.
         $post = Post::query()->whereKey($flag->post_id)->lockForUpdate()->first();
 
         if (! $post) {

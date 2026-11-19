@@ -12,6 +12,10 @@ use Psr\Http\Server\RequestHandlerInterface;
 /**
  * The numbers in the report centre's side bar: open and in-progress reports
  * by queue, and how many you hold. Two grouped queries.
+ *
+ * A handler, not a JSON:API resource: these are totals over the reports you
+ * may see, not records, and the side bar asks for them on its own, without
+ * the page of reports a meta field on the list endpoint would come with.
  */
 class CountsController implements RequestHandlerInterface
 {

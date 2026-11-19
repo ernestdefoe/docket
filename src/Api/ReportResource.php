@@ -42,7 +42,11 @@ class ReportResource extends AbstractDatabaseResource
         protected ReporterStats $stats,
         protected PostPlace $places
     ) {
+        $this->posts = new Deferred();
     }
+
+    /** @var Deferred<Report> */
+    protected Deferred $posts;
 
     public function type(): string
     {
@@ -177,14 +181,10 @@ class ReportResource extends AbstractDatabaseResource
         ];
     }
 
-    /** @var Report[] reports serialized without their post loaded */
-    protected array $waiting = [];
-
     /**
      * The place of a report's post. Reports serialized without their post
-     * (the subjects of notifications) wait, and the first of them to be read
-     * loads the posts and discussions of all of them: a getter that returns
-     * a closure is resolved after every other getter.
+     * (the subjects of notifications) load the posts and discussions of all
+     * of them at once.
      */
     protected function withPost(Report $report): mixed
     {
@@ -192,16 +192,11 @@ class ReportResource extends AbstractDatabaseResource
             return $this->places->of($report->post);
         }
 
-        $this->waiting[] = $report;
-
-        return function () use ($report) {
-            if ($this->waiting) {
-                (new Collection($this->waiting))->load('post.discussion');
-                $this->waiting = [];
-            }
-
-            return $this->places->of($report->post);
-        };
+        return $this->posts->later(
+            $report,
+            fn (array $reports) => (new Collection($reports))->load('post.discussion'),
+            fn () => $this->places->of($report->post)
+        );
     }
 
     public function sorts(): array

@@ -3,7 +3,6 @@
 namespace ErnestDefoe\Docket;
 
 use Carbon\Carbon;
-use ErnestDefoe\Docket\Crowd\Crowd;
 use Flarum\User\User;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -69,18 +68,8 @@ class ReporterStats
         $entries = (new Entry())->getTable();
         $reports = (new Report())->getTable();
         $grammar = Entry::query()->getQuery()->getGrammar();
-        $status = $grammar->wrap("$reports.status");
-        $state = $grammar->wrap("$reports.crowd_state");
         $created = $grammar->wrap("$entries.created_at");
-
-        // Fixed strings of this extension's own, so written in; the cut-offs
-        // are bound.
-        $restored = "'".Crowd::RESTORED."'";
-        $buckets = [
-            'resolved' => "$status = '".Report::RESOLVED."' and ($state is null or $state <> $restored)",
-            'rejected' => "($status = '".Report::REJECTED."' or $state = $restored)",
-            'open' => "$status in ('".Report::OPEN."', '".Report::IN_PROGRESS."') and ($state is null or $state <> $restored)",
-        ];
+        $buckets = Report::outcomeSql($grammar);
 
         $query = Entry::whereVisibleTo($actor)
             ->join($reports, "$reports.id", '=', "$entries.report_id")

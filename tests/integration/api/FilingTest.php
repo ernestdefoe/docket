@@ -56,6 +56,29 @@ class FilingTest extends DocketTestCase
     }
 
     #[Test]
+    public function a_queued_flag_still_files_if_the_lock_is_never_released(): void
+    {
+        $container = $this->app()->getContainer();
+        $bus = new BusFake($container->make(Dispatcher::class), [FileFlag::class]);
+        $container->instance(Dispatcher::class, $bus);
+
+        $this->flag(1, self::REPORTER);
+        $flag = \Flarum\Flags\Flag::query()->firstOrFail();
+        $this->database()->table('docket_entries')->delete();
+        $this->database()->table('docket_reports')->delete();
+
+        // Held by a request that died: the job gives up waiting after 5 s
+        // and files under the row lock alone.
+        $held = $container->make(Cache::class)->getStore()->lock('ernestdefoe-docket.file.1', 30);
+        $this->assertTrue($held->get());
+
+        (new FileFlag($flag, false, null))->handle($container->make(\ErnestDefoe\Docket\Docket::class));
+
+        $this->assertSame(1, $this->database()->table('docket_entries')->count());
+        $held->release();
+    }
+
+    #[Test]
     public function a_flag_after_a_report_closes_opens_a_new_one(): void
     {
         $this->flag(1, self::REPORTER);

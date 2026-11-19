@@ -6,8 +6,8 @@ use ErnestDefoe\Docket\Job\BackfillFlags;
 use Flarum\Extend\ExtenderInterface;
 use Flarum\Extend\LifecycleInterface;
 use Flarum\Extension\Extension;
-use Illuminate\Contracts\Bus\Dispatcher as Bus;
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Queue\Queue;
 
 /**
  * Whenever Docket is enabled, file the flags it has not seen: those from
@@ -22,7 +22,7 @@ class BackfillOnEnable implements ExtenderInterface, LifecycleInterface
 
     public function onEnable(Container $container, Extension $extension): void
     {
-        $container->make(Bus::class)->dispatch(new BackfillFlags());
+        $container->call(fn (Queue $queue) => $queue->push(new BackfillFlags()));
     }
 
     public function onDisable(Container $container, Extension $extension): void

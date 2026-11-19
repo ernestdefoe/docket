@@ -5,7 +5,6 @@ namespace ErnestDefoe\Docket;
 use Carbon\Carbon;
 use Flarum\Database\AbstractModel;
 use Flarum\Database\ScopeVisibilityTrait;
-use Flarum\Discussion\Discussion;
 use Flarum\Post\Post;
 use Flarum\User\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -29,7 +28,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Post|null $post
- * @property-read Discussion|null $discussion
  * @property-read User|null $user
  * @property-read Queue|null $queue
  * @property-read User|null $assignee
@@ -50,6 +48,30 @@ class Report extends AbstractModel
     public const ACTIVE = [self::OPEN, self::IN_PROGRESS];
 
     public const STATUSES = [self::OPEN, self::IN_PROGRESS, self::RESOLVED, self::REJECTED];
+
+    /**
+     * How a closed report counts for its reporters, as SQL over the reports
+     * table: one rule for the reporter records and the crowd's trust
+     * weighting. A report whose post staff restored after the crowd hid it
+     * counts as rejected, even if it was resolved later. The values are this
+     * extension's own fixed strings, so they are written in.
+     *
+     * @return array{resolved: string, rejected: string, open: string}
+     */
+    public static function outcomeSql(\Illuminate\Database\Query\Grammars\Grammar $grammar): array
+    {
+        $table = (new self())->getTable();
+        $status = $grammar->wrap("$table.status");
+        $state = $grammar->wrap("$table.crowd_state");
+        $restored = "'".Crowd\Crowd::RESTORED."'";
+        $notRestored = "($state is null or $state <> $restored)";
+
+        return [
+            'resolved' => "$status = '".self::RESOLVED."' and $notRestored",
+            'rejected' => "($status = '".self::REJECTED."' or $state = $restored)",
+            'open' => "$status in ('".self::OPEN."', '".self::IN_PROGRESS."') and $notRestored",
+        ];
+    }
 
     protected $table = 'docket_reports';
 
@@ -72,11 +94,6 @@ class Report extends AbstractModel
     public function post(): BelongsTo
     {
         return $this->belongsTo(Post::class);
-    }
-
-    public function discussion(): BelongsTo
-    {
-        return $this->belongsTo(Discussion::class);
     }
 
     public function user(): BelongsTo

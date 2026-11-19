@@ -40,7 +40,15 @@ class EntryResource extends AbstractDatabaseResource
         protected ReporterStats $stats,
         protected PostPlace $postPlaces
     ) {
+        $this->placing = new Deferred();
+        $this->reports = new Deferred();
     }
+
+    /** @var Deferred<Entry> */
+    protected Deferred $placing;
+
+    /** @var Deferred<Entry> */
+    protected Deferred $reports;
 
     public function type(): string
     {
@@ -133,9 +141,6 @@ class EntryResource extends AbstractDatabaseResource
         ];
     }
 
-    /** @var Entry[] */
-    protected array $placing = [];
-
     /**
      * The posts placed so far, by the actor they were looked up for: a
      * resource can outlive a request, and what one actor sees is not what
@@ -155,55 +160,47 @@ class EntryResource extends AbstractDatabaseResource
             return null;
         }
 
-        $this->placing[] = $entry;
+        $actor = $context->getActor();
 
-        return function () use ($entry, $context) {
-            $actor = $context->getActor();
-            $this->places ??= new WeakMap();
-            $known = $this->places[$actor] ?? [];
+        return $this->placing->later(
+            $entry,
+            fn (array $entries) => $this->lookUpPosts($entries, $actor),
+            fn () => $this->postPlaces->of($this->places[$actor][$entry->post_id] ?? null)
+        );
+    }
 
-            if ($this->placing) {
-                $ids = array_diff(array_unique(array_map(fn (Entry $e) => (int) $e->post_id, $this->placing)), array_keys($known));
-                $found = $ids ? Post::whereVisibleTo($actor)->whereIn('posts.id', $ids)->with('discussion')->get()->keyBy('id')->all() : [];
+    /**
+     * @param Entry[] $entries
+     */
+    protected function lookUpPosts(array $entries, User $actor): void
+    {
+        $this->places ??= new WeakMap();
+        $known = $this->places[$actor] ?? [];
+        $ids = array_diff(array_unique(array_map(fn (Entry $e) => (int) $e->post_id, $entries)), array_keys($known));
+        $found = $ids ? Post::whereVisibleTo($actor)->whereIn('posts.id', $ids)->with('discussion')->get()->keyBy('id')->all() : [];
 
-                foreach ($ids as $id) {
-                    $known[(int) $id] = $found[$id] ?? null;
-                }
+        foreach ($ids as $id) {
+            $known[(int) $id] = $found[$id] ?? null;
+        }
 
-                $this->places[$actor] = $known;
-                $this->placing = [];
-            }
-
-            return $this->postPlaces->of($known[$entry->post_id] ?? null);
-        };
+        $this->places[$actor] = $known;
     }
 
     /**
      * Entries serialized without their report loaded (the subjects of
-     * notifications) wait here, and the first of them to be read loads the
-     * reports of all of them at once: a getter that returns a closure is
-     * resolved after every other getter.
-     *
-     * @var Entry[]
+     * notifications) load the reports of all of them at once.
      */
-    protected array $waiting = [];
-
     protected function withReport(Entry $entry, callable $value): mixed
     {
         if ($entry->relationLoaded('report')) {
             return $value($entry->report);
         }
 
-        $this->waiting[] = $entry;
-
-        return function () use ($entry, $value) {
-            if ($this->waiting) {
-                (new Collection($this->waiting))->load('report');
-                $this->waiting = [];
-            }
-
-            return $value($entry->report);
-        };
+        return $this->reports->later(
+            $entry,
+            fn (array $entries) => (new Collection($entries))->load('report'),
+            fn () => $value($entry->report)
+        );
     }
 
     public function sorts(): array

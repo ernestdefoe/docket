@@ -7,7 +7,7 @@ use ErnestDefoe\Docket\Docket;
 use ErnestDefoe\Docket\DocketServiceProvider;
 use ErnestDefoe\Docket\Entry;
 use ErnestDefoe\Docket\Extend\BackfillOnEnable;
-use ErnestDefoe\Docket\Job\HideInsteadOfApproval;
+use ErnestDefoe\Docket\Listener\ApprovalDisabled;
 use ErnestDefoe\Docket\Listener\RecordActivity;
 use ErnestDefoe\Docket\Notification\CrowdActionBlueprint;
 use ErnestDefoe\Docket\Notification\ReportAssignedBlueprint;
@@ -32,7 +32,6 @@ use Flarum\Post\Event\Hidden as PostHidden;
 use Flarum\Post\Event\Restored as PostRestored;
 use Flarum\Search\Database\DatabaseSearchDriver;
 use Flarum\User\Event\Deleting as UserDeleting;
-use Illuminate\Contracts\Bus\Dispatcher as Bus;
 
 return [
     (new Extend\Frontend('forum'))
@@ -128,11 +127,7 @@ return [
         ->listen(FlagDeleting::class, [RecordActivity::class, 'flagDeleting'])
         ->listen(UserDeleting::class, [RecordActivity::class, 'userDeleting'])
         ->listen(GroupDeleted::class, fn () => resolve(QueueAccess::class)->forget())
-        ->listen(ExtensionDisabled::class, function (ExtensionDisabled $event) {
-            if ($event->extension->getId() === 'flarum-approval') {
-                resolve(Bus::class)->dispatch(new HideInsteadOfApproval());
-            }
-        }),
+        ->listen(ExtensionDisabled::class, ApprovalDisabled::class),
 
     (new Extend\Conditional())
         // Permission checks on each post read its discussion's tags: load

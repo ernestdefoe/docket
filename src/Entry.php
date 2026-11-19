@@ -22,7 +22,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $ip_hash never serialized
  * @property Carbon|null $created_at
  * @property-read Report $report
- * @property-read \Flarum\Post\Post|null $post
  * @property-read User|null $user
  */
 class Entry extends AbstractModel
@@ -36,11 +35,6 @@ class Entry extends AbstractModel
     public function report(): BelongsTo
     {
         return $this->belongsTo(Report::class);
-    }
-
-    public function post(): BelongsTo
-    {
-        return $this->belongsTo(\Flarum\Post\Post::class);
     }
 
     public function user(): BelongsTo

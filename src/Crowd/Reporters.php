@@ -125,8 +125,7 @@ class Reporters
         $entries = (new Entry())->getTable();
         $reports = (new Report())->getTable();
         $grammar = Entry::query()->getQuery()->getGrammar();
-        $status = $grammar->wrap("$reports.status");
-        $state = $grammar->wrap("$reports.crowd_state");
+        $outcome = Report::outcomeSql($grammar);
 
         $rows = Entry::query()
             ->join($reports, "$reports.id", '=', "$entries.report_id")
@@ -135,8 +134,8 @@ class Reporters
             ->when($exceptReport, fn ($q) => $q->where("$entries.report_id", '!=', $exceptReport))
             ->groupBy("$entries.user_id")
             ->select("$entries.user_id")
-            ->selectRaw("sum(case when $status = ? and ($state is null or $state <> ?) then 1 else 0 end) as upheld", [Report::RESOLVED, Crowd::RESTORED])
-            ->selectRaw("sum(case when $status = ? or $state = ? then 1 else 0 end) as wrong", [Report::REJECTED, Crowd::RESTORED])
+            ->selectRaw("sum(case when {$outcome['resolved']} then 1 else 0 end) as upheld")
+            ->selectRaw("sum(case when {$outcome['rejected']} then 1 else 0 end) as wrong")
             ->toBase()
             ->get();
 
